@@ -155,18 +155,4 @@ All AWS resources provisioned with Terraform:
 
 ---
 
-## Resume Bullets
-
-```
-- Built and deployed a serverless website uptime monitoring application using
-  React, S3, CloudFront, API Gateway, Lambda, DynamoDB, EventBridge, SNS,
-  and Terraform across a full production-grade AWS architecture.
-
-- Implemented scheduled health checks every 5 minutes tracking website
-  availability, response latency, status codes, and uptime history with
-  SNS email alerts on downtime detection.
-
-- Configured production observability using CloudWatch Logs, custom metrics,
-  alarms, and dashboards; automated full deployment via GitHub Actions CI/CD
-  with Terraform validation, Lambda deploys, and S3 frontend sync on every push.
 ```
