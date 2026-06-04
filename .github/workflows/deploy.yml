@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   terraform-validate:
     name: Validate Terraform
@@ -17,11 +20,15 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.5.0
+          terraform_version: 1.9.0
 
       - name: Terraform Init
         working-directory: terraform
-        run: terraform init -backend=false
+        run: |
+          terraform init \
+            -backend=false \
+            -get=true \
+            -upgrade
 
       - name: Terraform Validate
         working-directory: terraform
@@ -29,7 +36,7 @@ jobs:
 
       - name: Terraform Format Check
         working-directory: terraform
-        run: terraform fmt -check
+        run: terraform fmt -check -diff
 
   deploy-lambda:
     name: Deploy Lambda Functions
