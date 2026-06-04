@@ -154,5 +154,3 @@ All AWS resources provisioned with Terraform:
 - 3 CloudWatch alarms
 
 ---
-
-```
