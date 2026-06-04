@@ -1,0 +1,13 @@
+variable "aws_region" {
+  default = "us-east-1"
+}
+
+variable "alert_email" {
+  description = "Email for SNS downtime alerts"
+  default     = "krishnakoushikthokala@gmail.com"
+}
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name for frontend"
+  default     = "cloudops-uptime-monitor"
+}
