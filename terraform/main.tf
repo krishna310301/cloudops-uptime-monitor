@@ -132,8 +132,8 @@ resource "aws_cloudwatch_event_rule" "uptime_schedule" {
 }
 
 resource "aws_cloudwatch_event_target" "url_checker_target" {
-  rule = aws_cloudwatch_event_rule.uptime_schedule.name
-  arn  = aws_lambda_function.url_checker.arn
+  rule      = aws_cloudwatch_event_rule.uptime_schedule.name
+  arn       = aws_lambda_function.url_checker.arn
   target_id = "cloudops-url-checker"
 }
 
@@ -168,7 +168,7 @@ resource "aws_s3_bucket" "frontend" {
 resource "aws_s3_bucket_website_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
   index_document { suffix = "index.html" }
-  error_document  { key    = "index.html" }
+  error_document { key = "index.html" }
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
