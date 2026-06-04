@@ -1,0 +1,20 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/*.zip
+
+# Lambda zips
+lambda/*.zip
+
+# React
+frontend/node_modules/
+frontend/build/
+
+# Mac
+.DS_Store
+
+# Environment
+.env
+*.env
