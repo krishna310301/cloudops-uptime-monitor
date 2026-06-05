@@ -13,6 +13,19 @@ The dashboard allows users to:
 
 ---
 
+## Screenshots
+
+### Live Dashboard
+![Dashboard](docs/screenshots/dashboard.png)
+
+### CloudWatch Monitoring
+![CloudWatch](docs/screenshots/cloudwatch.png)
+
+### CI/CD Pipeline
+![Pipeline](docs/screenshots/pipeline.png)
+
+---
+
 ## Architecture
 
 ```
@@ -160,7 +173,9 @@ All AWS resources provisioned with Terraform:
 - 1 S3 bucket with static website hosting
 - 3 CloudWatch alarms
 
-- ## Quick Start
+---
+
+## Quick Start
 
 ```bash
 git clone https://github.com/krishna310301/cloudops-uptime-monitor.git
