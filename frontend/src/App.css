@@ -534,3 +534,9 @@ footer {
     align-items: stretch;
   }
 }
+
+.pill-danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+}

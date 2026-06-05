@@ -223,6 +223,9 @@ function App() {
 
         <div className="hero-meta">
           <span className="pill pill-live">● Live</span>
+          <span className={apiHealthy ? "pill pill-live" : "pill pill-danger"}>
+            API: {apiHealthy ? "Online" : "Offline"}
+          </span>
           <span className="pill">us-east-1</span>
           <span className="pill">UI refresh: 30s</span>
           <span className="pill">Checks: 5 min</span>
