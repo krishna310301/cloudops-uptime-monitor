@@ -76,16 +76,16 @@ Terraform IaC + GitHub Actions CI/CD
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React, S3, CloudFront |
-| API | API Gateway, Lambda (Python) |
-| Scheduler | EventBridge |
-| Database | DynamoDB |
-| Alerts | SNS |
-| Monitoring | CloudWatch Logs, Metrics, Alarms, Dashboard |
-| Infrastructure | Terraform |
-| CI/CD | GitHub Actions |
+| Layer          | Technology                                  |
+| -------------- | ------------------------------------------- |
+| Frontend       | React, S3, CloudFront                       |
+| API            | API Gateway, Lambda (Python)                |
+| Scheduler      | EventBridge                                 |
+| Database       | DynamoDB                                    |
+| Alerts         | SNS                                         |
+| Monitoring     | CloudWatch Logs, Metrics, Alarms, Dashboard |
+| Infrastructure | Terraform                                   |
+| CI/CD          | GitHub Actions                              |
 
 ---
 
@@ -127,12 +127,12 @@ cloudops-uptime-monitor/
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | /status | Get latest uptime results for all URLs |
-| GET | /urls | List all monitored URLs |
-| POST | /urls | Add a new URL to monitor |
-| DELETE | /urls/{url} | Remove a URL from monitoring |
+| Method | Endpoint    | Description                            |
+| ------ | ----------- | -------------------------------------- |
+| GET    | /status     | Get latest uptime results for all URLs |
+| GET    | /urls       | List all monitored URLs                |
+| POST   | /urls       | Add a new URL to monitor               |
+| DELETE | /urls/{url} | Remove a URL from monitoring           |
 
 ---
 
