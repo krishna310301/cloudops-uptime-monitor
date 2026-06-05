@@ -1,8 +1,15 @@
 # ☁️ CloudOps Uptime Monitor
 
-A production-grade, serverless website uptime monitoring system built on AWS. Automatically checks website availability every 5 minutes, stores historical data, sends alerts on downtime, and displays live status through a React dashboard.
+A production-style, serverless website uptime monitoring system built on AWS. Automatically checks website availability every 5 minutes, stores historical data, sends alerts on downtime, and displays live status through a React dashboard.
 
 **Live Dashboard:** https://d3hlcf532b9plq.cloudfront.net
+
+The dashboard allows users to:
+- Add URLs to monitor
+- View latest uptime status for all monitored sites
+- Track response latency and HTTP status codes per site
+- Receive SNS email alerts when a monitored site goes down
+- Auto-refreshes every 30 seconds
 
 ---
 
@@ -152,5 +159,30 @@ All AWS resources provisioned with Terraform:
 - 1 SNS topic + email subscription
 - 1 S3 bucket with static website hosting
 - 3 CloudWatch alarms
+
+- ## Quick Start
+
+```bash
+git clone https://github.com/krishna310301/cloudops-uptime-monitor.git
+cd cloudops-uptime-monitor/terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your email and bucket name
+terraform init
+terraform plan
+terraform apply
+```
+
+After deployment:
+1. Confirm the SNS email subscription from your inbox
+2. Open the CloudFront URL from Terraform outputs
+3. Add a URL from the dashboard
+4. Wait for the next EventBridge check cycle (every 5 minutes)
+
+## Cleanup
+
+```bash
+cd terraform
+terraform destroy
+```
 
 ---
