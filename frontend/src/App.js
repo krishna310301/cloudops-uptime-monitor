@@ -1,284 +1,438 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import "./App.css";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || "https://3c7g55lcd0.execute-api.us-east-1.amazonaws.com/prod";
+const API_BASE =
+  process.env.REACT_APP_API_BASE_URL ||
+  "https://3c7g55lcd0.execute-api.us-east-1.amazonaws.com/prod";
+
 function App() {
   const [status, setStatus] = useState([]);
   const [urls, setUrls] = useState([]);
   const [newUrl, setNewUrl] = useState("");
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [deletingUrl, setDeletingUrl] = useState("");
+  const [toast, setToast] = useState(null);
+  const [error, setError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [apiHealthy, setApiHealthy] = useState(true);
 
   useEffect(() => {
     fetchData();
+
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
+  const showToast = (type, message) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3500);
+  };
+
   const fetchData = async () => {
     try {
+      setError("");
+
       const [statusRes, urlsRes] = await Promise.all([
         fetch(`${API_BASE}/status`),
-        fetch(`${API_BASE}/urls`)
+        fetch(`${API_BASE}/urls`),
       ]);
+
+      if (!statusRes.ok || !urlsRes.ok) {
+        throw new Error("API request failed");
+      }
+
       const statusData = await statusRes.json();
       const urlsData = await urlsRes.json();
+
       setStatus(statusData.results || []);
       setUrls(urlsData.urls || []);
+      setApiHealthy(true);
+      setLastUpdated(new Date());
+      
     } catch (err) {
-      console.error("Failed to fetch:", err);
+      console.error("Failed to fetch dashboard data:", err);
+      setError("Unable to load monitoring data. Check API Gateway/Lambda health and try again.");
+      setApiHealthy(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const addUrl = async () => {
-    if (!newUrl) return;
+  const normalizeUrl = (value) => {
+    const trimmed = value.trim();
+
+    if (!trimmed) return "";
+
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return trimmed;
+    }
+
+    return `https://${trimmed}`;
+  };
+
+  const isValidUrl = (value) => {
     try {
-      const res = await fetch(`${API_BASE}/urls`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: newUrl })
-      });
-      const data = await res.json();
-      setMessage(data.message);
-      setNewUrl("");
-      fetchData();
-      setTimeout(() => setMessage(""), 3000);
-    } catch (err) {
-      setMessage("Error adding URL");
+      const parsed = new URL(value);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+      return false;
     }
   };
 
-  const getStatusColor = (isUp) => isUp ? "#22c55e" : "#ef4444";
-  const getStatusText = (isUp) => isUp ? "UP" : "DOWN";
+  const addUrl = async () => {
+    const normalizedUrl = normalizeUrl(newUrl);
 
-  const upCount = status.filter(s => s.is_up).length;
-  const downCount = status.filter(s => !s.is_up).length;
+    if (!normalizedUrl) {
+      showToast("error", "Enter a website URL to monitor.");
+      return;
+    }
+
+    if (!isValidUrl(normalizedUrl)) {
+      showToast("error", "Enter a valid URL, for example https://example.com.");
+      return;
+    }
+
+    try {
+      setAdding(true);
+      setError("");
+
+      const res = await fetch(`${API_BASE}/urls`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: normalizedUrl }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to add URL");
+      }
+
+      setNewUrl("");
+      showToast("success", data.message || "URL added successfully.");
+      fetchData();
+    } catch (err) {
+      console.error("Failed to add URL:", err);
+      showToast("error", err.message || "Error adding URL.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const deleteUrl = async (url) => {
+    try {
+      setDeletingUrl(url);
+      setError("");
+
+      const res = await fetch(`${API_BASE}/urls/${encodeURIComponent(url)}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to remove URL");
+      }
+
+      showToast("success", data.message || "URL removed successfully.");
+      fetchData();
+    } catch (err) {
+      console.error("Failed to remove URL:", err);
+      showToast("error", err.message || "Error removing URL.");
+    } finally {
+      setDeletingUrl("");
+    }
+  };
+
+  const metrics = useMemo(() => {
+    const upCount = status.filter((site) => site.is_up).length;
+    const downCount = status.filter((site) => !site.is_up).length;
+
+    const latencyValues = status
+      .map((site) => Number(site.latency_ms))
+      .filter((value) => Number.isFinite(value) && value >= 0);
+
+    const avgLatency =
+      latencyValues.length > 0
+        ? Math.round(latencyValues.reduce((sum, value) => sum + value, 0) / latencyValues.length)
+        : 0;
+
+    const overallHealth =
+      status.length === 0 ? "unknown" : downCount > 0 ? "degraded" : "healthy";
+
+    return {
+      upCount,
+      downCount,
+      avgLatency,
+      totalCount: status.length,
+      overallHealth,
+    };
+  }, [status]);
+
+  const getStatusLabel = (site) => {
+    if (!site) return "UNKNOWN";
+    if (!site.is_up) return "DOWN";
+
+    const latency = Number(site.latency_ms);
+    if (Number.isFinite(latency) && latency > 1000) return "SLOW";
+
+    return "UP";
+  };
+
+  const formatTime = (value) => {
+    if (!value) return "Never";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Unknown";
+
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return "Never";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Unknown";
+
+    return date.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>☁️ CloudOps Uptime Monitor</h1>
-        <p style={styles.subtitle}>Real-time website availability tracking</p>
-      </div>
+    <main className="app-shell">
+      <section className="hero">
+        <div>
+          <div className="eyebrow">AWS Serverless Monitoring Console</div>
+          <h1>CloudOps Uptime Monitor</h1>
+          <p>
+            Track website availability, latency, and downtime alerts using Lambda,
+            EventBridge, DynamoDB, SNS, CloudWatch, and Terraform.
+          </p>
+        </div>
 
-      <div style={styles.statsRow}>
-        <div style={{...styles.statCard, borderColor: "#22c55e"}}>
-          <div style={{...styles.statNumber, color: "#22c55e"}}>{upCount}</div>
-          <div style={styles.statLabel}>Sites Up</div>
+        <div className="hero-meta">
+          <span className="pill pill-live">● Live</span>
+          <span className="pill">us-east-1</span>
+          <span className="pill">UI refresh: 30s</span>
+          <span className="pill">Checks: 5 min</span>
         </div>
-        <div style={{...styles.statCard, borderColor: "#ef4444"}}>
-          <div style={{...styles.statNumber, color: "#ef4444"}}>{downCount}</div>
-          <div style={styles.statLabel}>Sites Down</div>
-        </div>
-        <div style={{...styles.statCard, borderColor: "#3b82f6"}}>
-          <div style={{...styles.statNumber, color: "#3b82f6"}}>{status.length}</div>
-          <div style={styles.statLabel}>Total Monitored</div>
-        </div>
-      </div>
+      </section>
 
-      <div style={styles.card}>
-        <h2 style={styles.sectionTitle}>Add URL to Monitor</h2>
-        <div style={styles.inputRow}>
+      {toast && <div className={`toast toast-${toast.type}`}>{toast.message}</div>}
+
+      {error && (
+        <section className="alert-banner">
+          <div>
+            <strong>Dashboard data unavailable</strong>
+            <p>{error}</p>
+          </div>
+          <button className="secondary-button" onClick={fetchData}>
+            Retry
+          </button>
+        </section>
+      )}
+
+      <section className="metrics-grid">
+        <MetricCard
+          label="Overall Health"
+          value={
+            metrics.overallHealth === "healthy"
+              ? "Healthy"
+              : metrics.overallHealth === "degraded"
+              ? "Degraded"
+              : "No Data"
+          }
+          tone={metrics.overallHealth}
+          helper="Current monitored fleet state"
+        />
+        <MetricCard
+          label="Sites Up"
+          value={metrics.upCount}
+          tone="healthy"
+          helper="Passing latest check"
+        />
+        <MetricCard
+          label="Sites Down"
+          value={metrics.downCount}
+          tone={metrics.downCount > 0 ? "degraded" : "neutral"}
+          helper="Failing latest check"
+        />
+        <MetricCard
+          label="Avg Latency"
+          value={metrics.totalCount ? `${metrics.avgLatency}ms` : "—"}
+          tone={metrics.avgLatency > 1000 ? "warning" : "neutral"}
+          helper="Across latest checks"
+        />
+        <MetricCard
+          label="Last Updated"
+          value={lastUpdated ? formatTime(lastUpdated) : "—"}
+          tone="neutral"
+          helper="Dashboard refresh time"
+        />
+      </section>
+
+      <section className="panel add-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Add Website</h2>
+            <p>Add a URL to the monitored list. The next EventBridge cycle will check it.</p>
+          </div>
+        </div>
+
+        <div className="url-form">
           <input
-            style={styles.input}
-            type="text"
-            placeholder="https://example.com"
             value={newUrl}
             onChange={(e) => setNewUrl(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && addUrl()}
+            onKeyDown={(e) => e.key === "Enter" && addUrl()}
+            placeholder="https://example.com"
+            aria-label="Website URL"
           />
-          <button style={styles.button} onClick={addUrl}>
-            Add URL
+          <button onClick={addUrl} disabled={adding}>
+            {adding ? "Adding..." : "Add URL"}
           </button>
         </div>
-        {message && <p style={styles.message}>{message}</p>}
-      </div>
+      </section>
 
-      <div style={styles.card}>
-        <h2 style={styles.sectionTitle}>Live Status</h2>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Live Status</h2>
+            <p>Latest check results stored in DynamoDB and displayed through API Gateway.</p>
+          </div>
+          <button className="secondary-button" onClick={fetchData}>
+            Refresh
+          </button>
+        </div>
+
         {loading ? (
-          <p style={styles.loading}>Loading...</p>
+          <SkeletonTable />
         ) : status.length === 0 ? (
-          <p style={styles.loading}>No data yet. Wait for next check cycle.</p>
+          <EmptyState
+            title="No check results yet"
+            message="Add a URL above or wait for the next scheduled EventBridge check."
+          />
         ) : (
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>URL</th>
-                <th style={styles.th}>Response Code</th>
-                <th style={styles.th}>Latency</th>
-                <th style={styles.th}>Last Checked</th>
-              </tr>
-            </thead>
-            <tbody>
-              {status.map((site, i) => (
-                <tr key={i} style={i % 2 === 0 ? styles.rowEven : styles.rowOdd}>
-                  <td style={styles.td}>
-                    <span style={{
-                      ...styles.badge,
-                      backgroundColor: getStatusColor(site.is_up)
-                    }}>
-                      {getStatusText(site.is_up)}
-                    </span>
-                  </td>
-                  <td style={styles.td}>{site.url}</td>
-                  <td style={styles.td}>{site.status_code}</td>
-                  <td style={styles.td}>{site.latency_ms}ms</td>
-                  <td style={styles.td}>
-                    {new Date(site.timestamp).toLocaleTimeString()}
-                  </td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>URL</th>
+                  <th>HTTP</th>
+                  <th>Latency</th>
+                  <th>Last Checked</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <p style={styles.refresh}>Auto-refreshes every 30 seconds</p>
-      </div>
+              </thead>
+              <tbody>
+                {status.map((site, index) => {
+                  const label = getStatusLabel(site);
 
-      <div style={styles.card}>
-        <h2 style={styles.sectionTitle}>Monitored URLs</h2>
-        {urls.length === 0 ? (
-          <p style={styles.loading}>No URLs added yet.</p>
-        ) : (
-          urls.map((url, i) => (
-            <div key={i} style={styles.urlItem}>
-              🔗 {url}
-            </div>
-          ))
+                  return (
+                    <tr key={`${site.url}-${site.timestamp}-${index}`}>
+                      <td>
+                        <StatusBadge label={label} />
+                      </td>
+                      <td>
+                        <div className="url-cell">
+                          <span>{site.url}</span>
+                        </div>
+                      </td>
+                      <td>{site.status_code || "—"}</td>
+                      <td>{site.latency_ms ? `${site.latency_ms}ms` : "—"}</td>
+                      <td>{formatDateTime(site.timestamp)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Monitored URLs</h2>
+            <p>Websites currently registered for scheduled uptime checks.</p>
+          </div>
+          <span className="count-badge">{urls.length} total</span>
+        </div>
+
+        {urls.length === 0 ? (
+          <EmptyState
+            title="No monitored URLs"
+            message="Add your first website to begin collecting uptime data."
+          />
+        ) : (
+          <div className="url-list">
+            {urls.map((url) => (
+              <div className="url-list-item" key={url}>
+                <div>
+                  <span className="url-dot" />
+                  <span>{url}</span>
+                </div>
+                <button
+                  className="danger-button"
+                  onClick={() => deleteUrl(url)}
+                  disabled={deletingUrl === url}
+                >
+                  {deletingUrl === url ? "Removing..." : "Remove"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <footer>
+        Built with AWS Lambda · API Gateway · DynamoDB · EventBridge · SNS · CloudWatch · Terraform
+      </footer>
+    </main>
+  );
+}
+
+function MetricCard({ label, value, helper, tone }) {
+  return (
+    <div className={`metric-card metric-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{helper}</p>
     </div>
   );
 }
 
-const styles = {
-  container: {
-    minHeight: "100vh",
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0",
-    fontFamily: "'Segoe UI', sans-serif",
-    padding: "24px",
-    maxWidth: "1000px",
-    margin: "0 auto"
-  },
-  header: {
-    textAlign: "center",
-    marginBottom: "32px"
-  },
-  title: {
-    fontSize: "2rem",
-    fontWeight: "bold",
-    color: "#38bdf8",
-    margin: 0
-  },
-  subtitle: {
-    color: "#94a3b8",
-    marginTop: "8px"
-  },
-  statsRow: {
-    display: "flex",
-    gap: "16px",
-    marginBottom: "24px"
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#1e293b",
-    borderRadius: "12px",
-    padding: "20px",
-    textAlign: "center",
-    border: "1px solid",
-  },
-  statNumber: {
-    fontSize: "2.5rem",
-    fontWeight: "bold"
-  },
-  statLabel: {
-    color: "#94a3b8",
-    marginTop: "4px"
-  },
-  card: {
-    backgroundColor: "#1e293b",
-    borderRadius: "12px",
-    padding: "24px",
-    marginBottom: "24px"
-  },
-  sectionTitle: {
-    fontSize: "1.2rem",
-    fontWeight: "600",
-    marginBottom: "16px",
-    color: "#38bdf8"
-  },
-  inputRow: {
-    display: "flex",
-    gap: "12px"
-  },
-  input: {
-    flex: 1,
-    padding: "10px 16px",
-    borderRadius: "8px",
-    border: "1px solid #334155",
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0",
-    fontSize: "0.95rem"
-  },
-  button: {
-    padding: "10px 24px",
-    backgroundColor: "#38bdf8",
-    color: "#0f172a",
-    border: "none",
-    borderRadius: "8px",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontSize: "0.95rem"
-  },
-  message: {
-    color: "#22c55e",
-    marginTop: "8px"
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse"
-  },
-  th: {
-    textAlign: "left",
-    padding: "10px 12px",
-    color: "#94a3b8",
-    borderBottom: "1px solid #334155",
-    fontSize: "0.85rem",
-    textTransform: "uppercase"
-  },
-  td: {
-    padding: "12px",
-    borderBottom: "1px solid #1e293b",
-    fontSize: "0.9rem"
-  },
-  rowEven: { backgroundColor: "#1e293b" },
-  rowOdd: { backgroundColor: "#162032" },
-  badge: {
-    padding: "4px 10px",
-    borderRadius: "999px",
-    color: "white",
-    fontWeight: "600",
-    fontSize: "0.8rem"
-  },
-  refresh: {
-    color: "#475569",
-    fontSize: "0.8rem",
-    marginTop: "12px",
-    textAlign: "right"
-  },
-  loading: {
-    color: "#94a3b8"
-  },
-  urlItem: {
-    padding: "10px 12px",
-    backgroundColor: "#0f172a",
-    borderRadius: "8px",
-    marginBottom: "8px",
-    fontSize: "0.9rem"
-  }
-};
+function StatusBadge({ label }) {
+  return <span className={`status-badge status-${label.toLowerCase()}`}>● {label}</span>;
+}
+
+function EmptyState({ title, message }) {
+  return (
+    <div className="empty-state">
+      <strong>{title}</strong>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function SkeletonTable() {
+  return (
+    <div className="skeleton-stack">
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+    </div>
+  );
+}
 
 export default App;
