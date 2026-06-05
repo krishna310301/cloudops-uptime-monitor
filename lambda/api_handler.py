@@ -1,11 +1,16 @@
 import json
+import os
 import boto3
 from boto3.dynamodb.conditions import Key
 from decimal import Decimal
 
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-checks_table = dynamodb.Table('uptime-checks')
-urls_table = dynamodb.Table('monitored-urls')
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+CHECKS_TABLE = os.environ.get('CHECKS_TABLE_NAME', 'uptime-checks')
+URLS_TABLE = os.environ.get('URLS_TABLE_NAME', 'monitored-urls')
+
+dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+checks_table = dynamodb.Table(CHECKS_TABLE)
+urls_table = dynamodb.Table(URLS_TABLE)
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
