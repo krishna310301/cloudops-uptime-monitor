@@ -105,6 +105,8 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
+        env:
+          REACT_APP_API_BASE_URL: ${{ secrets.REACT_APP_API_BASE_URL }}
         run: npm run build
 
       - name: Deploy frontend to S3
