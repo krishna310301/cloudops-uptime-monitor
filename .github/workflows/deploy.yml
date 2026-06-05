@@ -8,11 +8,13 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AWS_REGION: us-east-1
 
 jobs:
   terraform-validate:
     name: Validate Terraform
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: terraform-validate
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,28 +55,64 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy URL Checker Lambda
-        working-directory: lambda
+      - name: Package Lambda functions
         run: |
-          zip url_checker.zip url_checker.py
+          cd lambda
+          zip -r url_checker.zip url_checker.py
+          zip -r api_handler.zip api_handler.py
+
+      - name: Deploy URL checker Lambda
+        run: |
           aws lambda update-function-code \
             --function-name cloudops-url-checker \
-            --zip-file fileb://url_checker.zip \
-            --region us-east-1
-          aws lambda wait function-updated \
-            --function-name cloudops-url-checker \
-            --region us-east-1
+            --zip-file fileb://lambda/url_checker.zip
 
-      - name: Deploy API Handler Lambda
-        working-directory: lambda
+      - name: Deploy API handler Lambda
         run: |
-          zip api_handler.zip api_handler.py
           aws lambda update-function-code \
             --function-name cloudops-api-handler \
-            --zip-file fileb://api_handler.zip \
-            --region us-east-1
-          aws lambda wait function-updated \
-            --function-name cloudops-api-handler \
-            --region us-east-1
+            --zip-file fileb://lambda/api_handler.zip
+
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-lambda
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Deploy frontend to S3
+        run: |
+          aws s3 sync frontend/build s3://${{ secrets.FRONTEND_BUCKET_NAME }} --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
