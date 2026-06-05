@@ -23,3 +23,5 @@ frontend/.env.local
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/.terraform.lock.hcl
+.DS_Store
+**/.DS_Store
