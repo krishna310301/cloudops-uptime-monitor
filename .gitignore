@@ -18,3 +18,5 @@ frontend/build/
 # Environment
 .env
 *.env
+frontend/.env.production
+frontend/.env.local

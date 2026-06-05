@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API_BASE = "https://3c7g55lcd0.execute-api.us-east-1.amazonaws.com/prod";
-
+const API_BASE = process.env.REACT_APP_API_BASE_URL || "https://3c7g55lcd0.execute-api.us-east-1.amazonaws.com/prod";
 function App() {
   const [status, setStatus] = useState([]);
   const [urls, setUrls] = useState([]);
