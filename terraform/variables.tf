@@ -3,8 +3,7 @@ variable "aws_region" {
 }
 
 variable "alert_email" {
-  description = "Email for SNS downtime alerts"
-  default     = "krishnakoushikthokala@gmail.com"
+  description = "Email address for SNS downtime alerts"
 }
 
 variable "s3_bucket_name" {
