@@ -1,70 +1,76 @@
-# Getting Started with Create React App
+# CloudOps Uptime Monitor — Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React dashboard for the CloudOps Uptime Monitor project.
 
-## Available Scripts
+## Overview
 
-In the project directory, you can run:
+The frontend displays real-time uptime status for monitored websites, 
+showing response codes, latency, and check history. It communicates 
+with AWS API Gateway endpoints backed by Lambda and DynamoDB.
 
-### `npm start`
+## Features
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- Live uptime status for all monitored websites
+- Response status code, latency, and last check timestamp per site
+- Add new URLs to monitor via the dashboard
+- Auto-refreshes every 30 seconds
+- Responsive dark-themed UI
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Tech Stack
 
-### `npm test`
+- React
+- AWS S3 — static file hosting
+- AWS CloudFront — global CDN with HTTPS
+- AWS API Gateway — backend REST API
+- GitHub Actions — automated build and deployment
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Local Development
 
-### `npm run build`
+**Prerequisites:** Node.js 18+
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```bash
+git clone https://github.com/krishna310301/cloudops-uptime-monitor.git
+cd cloudops-uptime-monitor/frontend
+npm install
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+Create a `.env` file in the `frontend/` directory:
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+REACT_APP_API_BASE_URL=https://3c7g55lcd0.execute-api.us-east-1.amazonaws.com/prod
 
-### `npm run eject`
+Start the development server:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+npm start
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Open `http://localhost:3000`
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Build
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+npm run build
+```
 
-## Learn More
+Generates optimized production files in the `build/` directory.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Deployment
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Deployment is fully automated via GitHub Actions on every push to `main`:
 
-### Code Splitting
+1. Install dependencies
+2. Build React app
+3. Sync `build/` to S3 bucket
+4. Invalidate CloudFront cache
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+No manual deployment steps required.
 
-### Analyzing the Bundle Size
+## Environment Variables
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+| Variable | Description |
+|---|---|
+| `REACT_APP_API_BASE_URL` | API Gateway base URL |
 
-### Making a Progressive Web App
+## Live Demo
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+**Dashboard:** https://d3hlcf532b9plq.cloudfront.net
