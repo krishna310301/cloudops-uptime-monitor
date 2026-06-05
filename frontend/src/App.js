@@ -49,7 +49,7 @@ function App() {
       setUrls(urlsData.urls || []);
       setApiHealthy(true);
       setLastUpdated(new Date());
-      
+
     } catch (err) {
       console.error("Failed to fetch dashboard data:", err);
       setError("Unable to load monitoring data. Check API Gateway/Lambda health and try again.");
@@ -127,8 +127,12 @@ function App() {
       setDeletingUrl(url);
       setError("");
 
-      const res = await fetch(`${API_BASE}/urls/${encodeURIComponent(url)}`, {
+      const res = await fetch(`${API_BASE}/urls`, {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -253,8 +257,8 @@ function App() {
             metrics.overallHealth === "healthy"
               ? "Healthy"
               : metrics.overallHealth === "degraded"
-              ? "Degraded"
-              : "No Data"
+                ? "Degraded"
+                : "No Data"
           }
           tone={metrics.overallHealth}
           helper="Current monitored fleet state"

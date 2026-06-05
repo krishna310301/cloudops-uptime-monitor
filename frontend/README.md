@@ -102,8 +102,8 @@ No manual deployment steps required.
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
+| Variable                 | Description          |
+| ------------------------ | -------------------- |
 | `REACT_APP_API_BASE_URL` | API Gateway base URL |
 
 ## Live Demo

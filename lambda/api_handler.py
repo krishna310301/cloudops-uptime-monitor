@@ -40,16 +40,9 @@ def lambda_handler(event, context):
             body = json.loads(event.get('body', '{}'))
             return add_url(body.get('url'), headers)
         
-        elif method == 'DELETE' and '/urls/' in path:
-            url = None
-            if event.get('pathParameters'):
-                url = event['pathParameters'].get('url')
-            if not url:
-                url = path.split('/urls/')[-1]
-            if url:
-                from urllib.parse import unquote
-                url = unquote(url)
-            return delete_url(url, headers)
+        elif method == 'DELETE' and path == '/urls':
+           body = json.loads(event.get('body', '{}'))
+           return delete_url(body.get('url'), headers)
         
         elif method == 'GET' and path == '/status':
             return get_status(headers)
