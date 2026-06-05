@@ -27,6 +27,11 @@ resource "aws_dynamodb_table" "uptime_checks" {
     type = "S"
   }
 
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
   tags = { Project = "cloudops-uptime-monitor" }
 }
 
@@ -58,19 +63,47 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_basic" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
+# Least-privilege inline policy — replaces broad managed policies
+resource "aws_iam_role_policy" "lambda_least_privilege" {
+  name = "cloudops-lambda-policy"
+  role = aws_iam_role.lambda_role.id
 
-resource "aws_iam_role_policy_attachment" "lambda_dynamodb" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_sns" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DynamoDBAccess"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem",
+          "dynamodb:Scan",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query"
+        ]
+        Resource = [
+          aws_dynamodb_table.uptime_checks.arn,
+          aws_dynamodb_table.monitored_urls.arn
+        ]
+      },
+      {
+        Sid      = "SNSPublish"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = aws_sns_topic.uptime_alerts.arn
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
 }
 
 # SNS Topic
@@ -101,6 +134,14 @@ resource "aws_lambda_function" "url_checker" {
   memory_size      = 256
   source_code_hash = data.archive_file.url_checker_zip.output_base64sha256
 
+  environment {
+    variables = {
+      CHECKS_TABLE_NAME = aws_dynamodb_table.uptime_checks.name
+      URLS_TABLE_NAME   = aws_dynamodb_table.monitored_urls.name
+      SNS_TOPIC_ARN     = aws_sns_topic.uptime_alerts.arn
+    }
+  }
+
   tags = { Project = "cloudops-uptime-monitor" }
 }
 
@@ -120,6 +161,13 @@ resource "aws_lambda_function" "api_handler" {
   timeout          = 30
   memory_size      = 256
   source_code_hash = data.archive_file.api_handler_zip.output_base64sha256
+
+  environment {
+    variables = {
+      CHECKS_TABLE_NAME = aws_dynamodb_table.uptime_checks.name
+      URLS_TABLE_NAME   = aws_dynamodb_table.monitored_urls.name
+    }
+  }
 
   tags = { Project = "cloudops-uptime-monitor" }
 }
