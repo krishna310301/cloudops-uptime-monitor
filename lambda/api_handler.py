@@ -36,7 +36,14 @@ def lambda_handler(event, context):
             return add_url(body.get('url'), headers)
         
         elif method == 'DELETE' and '/urls/' in path:
-            url = event.get('pathParameters', {}).get('url')
+            url = None
+            if event.get('pathParameters'):
+                url = event['pathParameters'].get('url')
+            if not url:
+                url = path.split('/urls/')[-1]
+            if url:
+                from urllib.parse import unquote
+                url = unquote(url)
             return delete_url(url, headers)
         
         elif method == 'GET' and path == '/status':
@@ -97,18 +104,24 @@ def delete_url(url, headers):
     }
 
 def get_status(headers):
+    # Only show results for currently monitored URLs
+    monitored = urls_table.scan()
+    monitored_urls = {item['url'] for item in monitored.get('Items', [])}
+
     response = checks_table.scan()
     items = response.get('Items', [])
-    
+
     latest = {}
     for item in items:
         url = item['url']
+        if url not in monitored_urls:
+            continue
         if url not in latest or item['timestamp'] > latest[url]['timestamp']:
             latest[url] = item
-    
+
     results = list(latest.values())
     results.sort(key=lambda x: x['url'])
-    
+
     return {
         'statusCode': 200,
         'headers': headers,
