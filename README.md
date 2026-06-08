@@ -1,15 +1,18 @@
-# ☁️ CloudOps Uptime Monitor
+# CloudOps Uptime Monitor
 
-A production-style, serverless website uptime monitoring system built on AWS. It checks website availability every 5 minutes, stores recent status history, sends alerts on downtime, and displays live status through a React dashboard served by CloudFront.
+CloudOps Uptime Monitor is a serverless website uptime monitoring system built on AWS. It checks website availability every 5 minutes, stores recent status history, sends alerts on downtime, and displays live status through a React dashboard served by CloudFront.
+
+I built this after working in operations environments where a simple question like "is the service actually reachable?" needed a fast, trustworthy answer. This project keeps that workflow small and practical: scheduled checks, recent history, alerting, and a dashboard that makes the current state easy to scan.
 
 **Live Dashboard:** https://d3hlcf532b9plq.cloudfront.net
 
-The dashboard allows users to:
+From the dashboard, I can:
+
 - Add URLs to monitor
 - View latest uptime status for all monitored sites
 - Track response latency and HTTP status codes per site
 - Receive SNS email alerts when a monitored site goes down
-- Auto-refreshes every 30 seconds
+- Watch the view refresh automatically every 30 seconds
 
 ---
 
@@ -68,8 +71,8 @@ Terraform IaC + GitHub Actions CI/CD
 - **Instant alerts** — SNS email notifications when a site goes down
 - **Historical data** — Check results stored in DynamoDB with TTL-based retention
 - **Add/remove URLs** — API endpoints to manage monitored websites
-- **Full observability** — CloudWatch dashboard tracking Lambda invocations, errors, duration, API Gateway metrics
-- **Infrastructure as Code** — entire stack provisioned with Terraform
+- **CloudWatch visibility** — dashboard tracking Lambda invocations, errors, duration, and API Gateway metrics
+- **Infrastructure as Code** — stack provisioned with Terraform
 - **CI/CD pipeline** — GitHub Actions runs Lambda tests, validates Terraform, deploys Lambda functions, builds the frontend, syncs S3, and invalidates CloudFront
 
 ---
@@ -165,9 +168,9 @@ Dashboard: **CloudOps-Uptime-Monitor** in AWS CloudWatch console.
 
 ---
 
-## Infrastructure
+## AWS Infrastructure
 
-All AWS resources provisioned with Terraform:
+Terraform provisions:
 
 - 2 DynamoDB tables
 - 2 Lambda functions
