@@ -140,14 +140,14 @@ cloudops-uptime-monitor/
 
 ## CI/CD Pipeline
 
-Every pull request validates the project. Every push to `main` can deploy when the required AWS secrets are configured.
+Every push and pull request validates the project. AWS deployment is manual-only through `workflow_dispatch` with `deploy_to_aws = true`.
 
 1. **Runs Lambda unit tests** — validates URL normalization, input validation, and TTL writes
 2. **Validates Terraform** — runs `terraform validate` and `terraform fmt -check`
 3. **Deploys Lambda functions** — zips and updates both Lambda functions
 4. **Builds and deploys frontend** — runs `npm ci` and `npm run build`, syncs to S3, invalidates CloudFront cache
 
-Deployment uses GitHub Actions OIDC with `AWS_ROLE_TO_ASSUME`, avoiding long-lived AWS access keys in repository secrets.
+Manual deployment uses GitHub Actions OIDC with `AWS_ROLE_TO_ASSUME`, avoiding long-lived AWS access keys in repository secrets.
 
 ---
 

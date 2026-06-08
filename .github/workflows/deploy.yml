@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_to_aws:
+        description: "Deploy Lambda functions and frontend to AWS"
+        required: true
+        type: boolean
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -66,7 +73,7 @@ jobs:
     name: Deploy Lambda Functions
     runs-on: ubuntu-latest
     needs: [lambda-tests, terraform-validate]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_to_aws == true
 
     steps:
       - name: Checkout code
@@ -100,7 +107,7 @@ jobs:
     name: Deploy Frontend
     runs-on: ubuntu-latest
     needs: deploy-lambda
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_to_aws == true
 
     steps:
       - name: Checkout code
