@@ -1,6 +1,6 @@
 # ☁️ CloudOps Uptime Monitor
 
-A production-style, serverless website uptime monitoring system built on AWS. Automatically checks website availability every 5 minutes, stores historical data, sends alerts on downtime, and displays live status through a React dashboard.
+A production-style, serverless website uptime monitoring system built on AWS. It checks website availability every 5 minutes, stores recent status history, sends alerts on downtime, and displays live status through a React dashboard served by CloudFront.
 
 **Live Dashboard:** https://d3hlcf532b9plq.cloudfront.net
 
@@ -66,11 +66,11 @@ Terraform IaC + GitHub Actions CI/CD
 - **Automated monitoring** — EventBridge triggers URL checks every 5 minutes
 - **Real-time dashboard** — React frontend showing live status, latency, response codes
 - **Instant alerts** — SNS email notifications when a site goes down
-- **Historical data** — All check results stored in DynamoDB
+- **Historical data** — Check results stored in DynamoDB with TTL-based retention
 - **Add/remove URLs** — API endpoints to manage monitored websites
 - **Full observability** — CloudWatch dashboard tracking Lambda invocations, errors, duration, API Gateway metrics
 - **Infrastructure as Code** — entire stack provisioned with Terraform
-- **CI/CD pipeline** — GitHub Actions validates Terraform, deploys Lambda functions, builds and deploys frontend on every push
+- **CI/CD pipeline** — GitHub Actions runs Lambda tests, validates Terraform, deploys Lambda functions, builds the frontend, syncs S3, and invalidates CloudFront
 
 ---
 
@@ -78,7 +78,7 @@ Terraform IaC + GitHub Actions CI/CD
 
 | Layer          | Technology                                  |
 | -------------- | ------------------------------------------- |
-| Frontend       | React, S3, CloudFront                       |
+| Frontend       | React, private S3 origin, CloudFront        |
 | API            | API Gateway, Lambda (Python)                |
 | Scheduler      | EventBridge                                 |
 | Database       | DynamoDB                                    |
@@ -96,8 +96,8 @@ Terraform IaC + GitHub Actions CI/CD
 - **EventBridge** — scheduled rule triggering checks every 5 minutes
 - **API Gateway** — REST API for dashboard communication
 - **SNS** — email alerts on downtime detection
-- **S3** — hosts React frontend build
-- **CloudFront** — CDN serving frontend globally over HTTPS
+- **S3** — private origin bucket for the React frontend build
+- **CloudFront** — CDN serving the frontend globally over HTTPS using Origin Access Control
 - **CloudWatch** — logs, metrics, alarms, and dashboard for full observability
 - **IAM** — least-privilege roles for all Lambda functions
 - **Terraform** — provisions and manages all infrastructure as code
@@ -118,6 +118,7 @@ cloudops-uptime-monitor/
 │   ├── main.tf             # all AWS resources
 │   ├── variables.tf        # configurable variables
 │   └── outputs.tf          # output values
+├── tests/                  # Lambda handler unit tests
 └── .github/
     └── workflows/
         └── deploy.yml      # CI/CD pipeline
@@ -132,17 +133,21 @@ cloudops-uptime-monitor/
 | GET    | /status     | Get latest uptime results for all URLs |
 | GET    | /urls       | List all monitored URLs                |
 | POST   | /urls       | Add a new URL to monitor               |
-| DELETE | /urls/{url} | Remove a URL from monitoring           |
+| DELETE | /urls       | Remove a URL from monitoring using JSON body |
+| DELETE | /urls/{url} | Remove a URL from monitoring using encoded path |
 
 ---
 
 ## CI/CD Pipeline
 
-Every push to `main` automatically:
+Every pull request validates the project. Every push to `main` can deploy when the required AWS secrets are configured.
 
-1. **Validates Terraform** — runs `terraform validate` and `terraform fmt -check`
-2. **Deploys Lambda functions** — zips and updates both Lambda functions
-3. **Builds and deploys frontend** — runs `npm run build`, syncs to S3, invalidates CloudFront cache
+1. **Runs Lambda unit tests** — validates URL normalization, input validation, and TTL writes
+2. **Validates Terraform** — runs `terraform validate` and `terraform fmt -check`
+3. **Deploys Lambda functions** — zips and updates both Lambda functions
+4. **Builds and deploys frontend** — runs `npm ci` and `npm run build`, syncs to S3, invalidates CloudFront cache
+
+Deployment uses GitHub Actions OIDC with `AWS_ROLE_TO_ASSUME`, avoiding long-lived AWS access keys in repository secrets.
 
 ---
 
@@ -152,7 +157,7 @@ Three alarms configured:
 
 - `cloudops-url-checker-errors` — fires when Lambda errors ≥ 1
 - `cloudops-url-checker-duration` — fires when avg duration ≥ 25 seconds
-- `cloudops-api-5xx-errors` — fires when API Gateway 5XX errors ≥ 5
+- `cloudops-api-handler-errors` — fires when the API handler Lambda errors ≥ 1
 
 All alarms publish to SNS for email notification.
 
@@ -168,10 +173,12 @@ All AWS resources provisioned with Terraform:
 - 2 Lambda functions
 - 1 IAM role with least-privilege policies
 - 1 EventBridge rule + target
-- 1 API Gateway REST API
+- 1 API Gateway REST API with Lambda proxy integration and prod stage
 - 1 SNS topic + email subscription
-- 1 S3 bucket with static website hosting
+- 1 private S3 bucket for frontend assets
+- 1 CloudFront distribution with Origin Access Control
 - 3 CloudWatch alarms
+- 1 CloudWatch dashboard
 
 ---
 
@@ -189,9 +196,18 @@ terraform apply
 
 After deployment:
 1. Confirm the SNS email subscription from your inbox
-2. Open the CloudFront URL from Terraform outputs
-3. Add a URL from the dashboard
-4. Wait for the next EventBridge check cycle (every 5 minutes)
+2. Set `REACT_APP_API_BASE_URL` to the Terraform `api_url` output before building the frontend
+3. Open the CloudFront URL from Terraform outputs
+4. Add a URL from the dashboard
+5. Wait for the next EventBridge check cycle (every 5 minutes)
+
+## Local Validation
+
+```bash
+PYTHONPATH=. python -m unittest discover -s tests -v
+cd frontend && npm ci && npm run build
+cd ../terraform && terraform init -backend=false && terraform fmt -check && terraform validate
+```
 
 ## Cleanup
 

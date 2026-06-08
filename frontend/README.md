@@ -1,85 +1,31 @@
-# CloudOps Uptime Monitor — Frontend
+# CloudOps Uptime Monitor Frontend
 
 React dashboard for the CloudOps Uptime Monitor project.
 
-## Overview
+The frontend displays monitored URLs, latest uptime state, response status, latency, and last check time. It communicates with the API Gateway endpoint provisioned by Terraform.
 
-The frontend displays real-time uptime status for monitored websites, 
-showing response codes, latency, and check history. It communicates 
-with AWS API Gateway endpoints backed by Lambda and DynamoDB.
+## Environment
 
-## Features
+Create `frontend/.env.local` for local development:
 
-- Live uptime status for all monitored websites
-- Response status code, latency, and last check timestamp per site
-- Add new URLs to monitor via the dashboard
-- Auto-refreshes every 30 seconds
-- Responsive dark-themed UI
+```bash
+REACT_APP_API_BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com/prod
+```
 
-## Tech Stack
-
-- React
-- AWS S3 — static file hosting
-- AWS CloudFront — global CDN with HTTPS
-- AWS API Gateway — backend REST API
-- GitHub Actions — automated build and deployment
+Use the Terraform `api_url` output for this value.
 
 ## Local Development
 
-**Prerequisites:** Node.js 18+
-
 ```bash
-git clone https://github.com/krishna310301/cloudops-uptime-monitor.git
-cd cloudops-uptime-monitor/frontend
-npm install
-```
-
-Create a `.env` file in the `frontend/` directory:
-# CloudOps Uptime Monitor — Frontend
-
-React dashboard for the CloudOps Uptime Monitor project.
-
-## Overview
-
-The frontend displays real-time uptime status for monitored websites, 
-showing response codes, latency, and check history. It communicates 
-with AWS API Gateway endpoints backed by Lambda and DynamoDB.
-
-## Features
-
-- Live uptime status for all monitored websites
-- Response status code, latency, and last check timestamp per site
-- Add new URLs to monitor via the dashboard
-- Auto-refreshes every 30 seconds
-- Responsive dark-themed UI
-
-## Tech Stack
-
-- React
-- AWS S3 — static file hosting
-- AWS CloudFront — global CDN with HTTPS
-- AWS API Gateway — backend REST API
-- GitHub Actions — automated build and deployment
-
-## Local Development
-
-**Prerequisites:** Node.js 18+
-
-```bash
-git clone https://github.com/krishna310301/cloudops-uptime-monitor.git
-cd cloudops-uptime-monitor/frontend
-npm install
-```
-
-Create a `.env` file in the `frontend/` directory:
-REACT_APP_API_BASE_URL=https://3c7g55lcd0.execute-api.us-east-1.amazonaws.com/prod
-Start the development server:
-
-```bash
+npm ci
 npm start
 ```
 
-Open `http://localhost:3000`
+Open:
+
+```text
+http://localhost:3000
+```
 
 ## Build
 
@@ -87,25 +33,17 @@ Open `http://localhost:3000`
 npm run build
 ```
 
-Generates optimized production files in the `build/` directory.
+The production build is written to `frontend/build`.
 
 ## Deployment
 
-Deployment is fully automated via GitHub Actions on every push to `main`:
+GitHub Actions builds the app, syncs `frontend/build` to the private S3 frontend bucket, and invalidates the CloudFront distribution.
 
-1. Install dependencies
-2. Build React app
-3. Sync `build/` to S3 bucket
-4. Invalidate CloudFront cache
+Required deployment secrets:
 
-No manual deployment steps required.
-
-## Environment Variables
-
-| Variable                 | Description          |
-| ------------------------ | -------------------- |
-| `REACT_APP_API_BASE_URL` | API Gateway base URL |
-
-## Live Demo
-
-**Dashboard:** https://d3hlcf532b9plq.cloudfront.net
+```text
+AWS_ROLE_TO_ASSUME
+REACT_APP_API_BASE_URL
+FRONTEND_BUCKET_NAME
+CLOUDFRONT_DISTRIBUTION_ID
+```

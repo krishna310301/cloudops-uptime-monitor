@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 const API_BASE =
-  process.env.REACT_APP_API_BASE_URL ||
-  "https://3c7g55lcd0.execute-api.us-east-1.amazonaws.com/prod";
+  process.env.REACT_APP_API_BASE_URL || "";
 
 function App() {
   const [status, setStatus] = useState([]);
@@ -32,6 +31,10 @@ function App() {
   const fetchData = async () => {
     try {
       setError("");
+
+      if (!API_BASE) {
+        throw new Error("REACT_APP_API_BASE_URL is not configured");
+      }
 
       const [statusRes, urlsRes] = await Promise.all([
         fetch(`${API_BASE}/status`),
@@ -97,6 +100,10 @@ function App() {
       setAdding(true);
       setError("");
 
+      if (!API_BASE) {
+        throw new Error("REACT_APP_API_BASE_URL is not configured");
+      }
+
       const res = await fetch(`${API_BASE}/urls`, {
         method: "POST",
         headers: {
@@ -108,7 +115,7 @@ function App() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Failed to add URL");
+        throw new Error(data.message || data.error || "Failed to add URL");
       }
 
       setNewUrl("");
@@ -127,6 +134,10 @@ function App() {
       setDeletingUrl(url);
       setError("");
 
+      if (!API_BASE) {
+        throw new Error("REACT_APP_API_BASE_URL is not configured");
+      }
+
       const res = await fetch(`${API_BASE}/urls`, {
         method: "DELETE",
         headers: {
@@ -138,7 +149,7 @@ function App() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.message || "Failed to remove URL");
+        throw new Error(data.message || data.error || "Failed to remove URL");
       }
 
       showToast("success", data.message || "URL removed successfully.");

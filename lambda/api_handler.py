@@ -1,8 +1,9 @@
 import json
 import os
 import boto3
-from boto3.dynamodb.conditions import Key
 from decimal import Decimal
+from urllib.parse import unquote
+from urllib.parse import urlparse
 
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 CHECKS_TABLE = os.environ.get('CHECKS_TABLE_NAME', 'uptime-checks')
@@ -41,8 +42,12 @@ def lambda_handler(event, context):
             return add_url(body.get('url'), headers)
         
         elif method == 'DELETE' and path == '/urls':
-           body = json.loads(event.get('body', '{}'))
-           return delete_url(body.get('url'), headers)
+            body = json.loads(event.get('body', '{}'))
+            return delete_url(body.get('url'), headers)
+
+        elif method == 'DELETE' and path.startswith('/urls/'):
+            encoded_url = path.removeprefix('/urls/')
+            return delete_url(unquote(encoded_url), headers)
         
         elif method == 'GET' and path == '/status':
             return get_status(headers)
@@ -63,12 +68,22 @@ def lambda_handler(event, context):
         }
 
 def get_urls(headers):
-    response = urls_table.scan()
-    urls = [item['url'] for item in response.get('Items', [])]
+    urls = []
+    scan_kwargs = {}
+
+    while True:
+        response = urls_table.scan(**scan_kwargs)
+        urls.extend(item['url'] for item in response.get('Items', []))
+
+        if 'LastEvaluatedKey' not in response:
+            break
+
+        scan_kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
+
     return {
         'statusCode': 200,
         'headers': headers,
-        'body': json.dumps({'urls': urls})
+        'body': json.dumps({'urls': sorted(urls)})
     }
 
 def add_url(url, headers):
@@ -78,12 +93,20 @@ def add_url(url, headers):
             'headers': headers,
             'body': json.dumps({'error': 'URL is required'})
         }
-    
-    urls_table.put_item(Item={'url': url})
+    normalized_url = normalize_url(url)
+
+    if not is_valid_url(normalized_url):
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'Valid http or https URL is required'})
+        }
+
+    urls_table.put_item(Item={'url': normalized_url})
     return {
         'statusCode': 201,
         'headers': headers,
-        'body': json.dumps({'message': f'Added {url}'})
+        'body': json.dumps({'message': f'Added {normalized_url}'})
     }
 
 def delete_url(url, headers):
@@ -93,21 +116,47 @@ def delete_url(url, headers):
             'headers': headers,
             'body': json.dumps({'error': 'URL is required'})
         }
-    
-    urls_table.delete_item(Key={'url': url})
+    normalized_url = normalize_url(url)
+
+    if not is_valid_url(normalized_url):
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'Valid http or https URL is required'})
+        }
+
+    urls_table.delete_item(Key={'url': normalized_url})
     return {
         'statusCode': 200,
         'headers': headers,
-        'body': json.dumps({'message': f'Deleted {url}'})
+        'body': json.dumps({'message': f'Deleted {normalized_url}'})
     }
 
 def get_status(headers):
     # Only show results for currently monitored URLs
-    monitored = urls_table.scan()
-    monitored_urls = {item['url'] for item in monitored.get('Items', [])}
+    monitored_urls = set()
+    url_scan_kwargs = {}
 
-    response = checks_table.scan()
-    items = response.get('Items', [])
+    while True:
+        monitored = urls_table.scan(**url_scan_kwargs)
+        monitored_urls.update(item['url'] for item in monitored.get('Items', []))
+
+        if 'LastEvaluatedKey' not in monitored:
+            break
+
+        url_scan_kwargs['ExclusiveStartKey'] = monitored['LastEvaluatedKey']
+
+    items = []
+    checks_scan_kwargs = {}
+
+    while True:
+        response = checks_table.scan(**checks_scan_kwargs)
+        items.extend(response.get('Items', []))
+
+        if 'LastEvaluatedKey' not in response:
+            break
+
+        checks_scan_kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
 
     latest = {}
     for item in items:
@@ -125,3 +174,20 @@ def get_status(headers):
         'headers': headers,
         'body': json.dumps({'results': results}, cls=DecimalEncoder)
     }
+
+def normalize_url(value):
+    url = (value or '').strip()
+    if not url:
+        return ''
+
+    if not url.startswith(('http://', 'https://')):
+        url = f'https://{url}'
+
+    return url
+
+def is_valid_url(value):
+    try:
+        parsed = urlparse(value)
+        return parsed.scheme in ('http', 'https') and bool(parsed.netloc)
+    except Exception:
+        return False

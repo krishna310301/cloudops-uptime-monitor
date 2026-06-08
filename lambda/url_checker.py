@@ -4,17 +4,19 @@ import urllib.request
 import urllib.error
 import time
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+AWS_REGION = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
 
 CHECKS_TABLE = os.environ.get('CHECKS_TABLE_NAME', 'uptime-checks')
 URLS_TABLE = os.environ.get('URLS_TABLE_NAME', 'monitored-urls')
-SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN', 'arn:aws:sns:us-east-1:196750375574:cloudops-uptime-alerts')
+SNS_TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
+RESULT_TTL_DAYS = int(os.environ.get('RESULT_TTL_DAYS', '30'))
 
 checks_table = dynamodb.Table(CHECKS_TABLE)
 urls_table = dynamodb.Table(URLS_TABLE)
-sns = boto3.client('sns', region_name='us-east-1')
+sns = boto3.client('sns', region_name=AWS_REGION)
 
 def lambda_handler(event, context):
     urls = get_monitored_urls()
@@ -39,8 +41,18 @@ def lambda_handler(event, context):
 
 def get_monitored_urls():
     try:
-        response = urls_table.scan()
-        urls = [item['url'] for item in response.get('Items', [])]
+        urls = []
+        scan_kwargs = {}
+
+        while True:
+            response = urls_table.scan(**scan_kwargs)
+            urls.extend(item['url'] for item in response.get('Items', []))
+
+            if 'LastEvaluatedKey' not in response:
+                break
+
+            scan_kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
+
         print(f"Found {len(urls)} URLs in monitored-urls table: {urls}")
         return urls
     except Exception as e:
@@ -81,12 +93,15 @@ def check_url(url):
     }
 
 def save_to_dynamodb(result):
+    ttl = int((datetime.now(timezone.utc) + timedelta(days=RESULT_TTL_DAYS)).timestamp())
+
     checks_table.put_item(Item={
         'url': result['url'],
         'timestamp': result['timestamp'],
         'status_code': result['status_code'],
         'latency_ms': result['latency_ms'],
-        'is_up': result['is_up']
+        'is_up': result['is_up'],
+        'ttl': ttl
     })
 
 def send_alert(result):

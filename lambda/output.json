@@ -1,1 +1,0 @@
-{"statusCode": 200, "body": "[{\"url\": \"https://www.youtube.com\", \"timestamp\": \"2026-06-05T03:09:08Z\", \"status_code\": 200, \"latency_ms\": 186, \"is_up\": true}, {\"url\": \"https://www.apple.com\", \"timestamp\": \"2026-06-05T03:09:08Z\", \"status_code\": 200, \"latency_ms\": 130, \"is_up\": true}]"}
