@@ -28,9 +28,10 @@ From the dashboard, I can:
 | CORS posture | Changed from wildcard browser access to configured allowed origins, defaulting to the CloudFront dashboard |
 | Alert behavior | Added state-change alerting so sustained outages do not send repeated SNS emails, while recovery events still notify |
 | URL safety | Blocks localhost, private IP ranges, loopback, link-local, reserved targets, AWS metadata IP, and unsafe redirects |
+| Failure drill | Captured live outage/recovery drill with 1-second detection, 26-second dashboard DOWN visibility, and zero duplicate DOWN alerts |
 | Validation | Added backend, frontend, Terraform, and security checks for Lambda handlers, dashboard states, IaC validation, and code scanning |
 
-See [docs/metrics.md](docs/metrics.md) for formulas and operating assumptions.
+See [docs/metrics.md](docs/metrics.md) for formulas and [docs/failure-drill.md](docs/failure-drill.md) for the completed outage drill.
 
 ---
 
@@ -44,6 +45,9 @@ See [docs/metrics.md](docs/metrics.md) for formulas and operating assumptions.
 
 ### CI/CD Pipeline
 ![Pipeline](docs/screenshots/pipeline.png)
+
+### Failure Drill
+![Failure drill dashboard down](docs/screenshots/failure-drill-02-dashboard-down.jpg)
 
 ---
 

@@ -18,8 +18,8 @@ The state-transition logic is covered by Lambda unit tests. A live drill should 
 
 - Terraform apply completed successfully.
 - SNS email subscription confirmed.
-- Frontend deployed with `REACT_APP_API_BASE_URL` and `REACT_APP_API_KEY`.
-- Dashboard API key is active in the API Gateway usage plan.
+- Frontend deployed with `REACT_APP_API_BASE_URL`.
+- If API Gateway API keys are enabled in the target stack, frontend is also deployed with `REACT_APP_API_KEY`.
 
 ## Drill Steps
 
@@ -33,20 +33,29 @@ The state-transition logic is covered by Lambda unit tests. A live drill should 
 8. Restore the URL and wait for the next scheduled run.
 9. Confirm the dashboard returns to `UP`.
 
-## Evidence Table
+## Completed Drill: 2026-06-12
 
-Fill this table during the drill. Use exact timestamps from CloudWatch Logs, SNS email headers, and the dashboard.
+Controlled endpoint:
+
+```text
+https://d3hlcf532b9plq.cloudfront.net/drill/uptime-drill.txt
+```
+
+The drill used the project CloudFront distribution as a controllable public endpoint. The object was uploaded for the healthy state, deleted to force a `404`, then uploaded again to verify recovery.
 
 | Event | Timestamp | Evidence |
 |---|---|---|
-| URL added | `YYYY-MM-DD HH:MM:SS TZ` | Dashboard screenshot or API response |
-| Failure started | `YYYY-MM-DD HH:MM:SS TZ` | Test endpoint log or manual note |
-| EventBridge invoked checker | `YYYY-MM-DD HH:MM:SS TZ` | Lambda log stream |
-| Failed check stored | `YYYY-MM-DD HH:MM:SS TZ` | Lambda log or DynamoDB item |
-| SNS alert published | `YYYY-MM-DD HH:MM:SS TZ` | Lambda log and `AlertsSent` metric |
-| Email received | `YYYY-MM-DD HH:MM:SS TZ` | Email screenshot |
-| Dashboard showed DOWN | `YYYY-MM-DD HH:MM:SS TZ` | Dashboard screenshot |
-| Recovery confirmed | `YYYY-MM-DD HH:MM:SS TZ` | Dashboard screenshot |
+| URL added | `2026-06-12T23:46:07Z` | API response and [dashboard UP screenshot](screenshots/failure-drill-01-url-added-up.jpg) |
+| Baseline healthy check stored | `2026-06-12T23:46:08Z` | Lambda response: `status_code=200`, `is_up=true`, `latency_ms=179` |
+| Failure started | `2026-06-12T23:51:14Z` | CloudFront endpoint returned `404 NoSuchKey` after object deletion and invalidation |
+| Failed check stored | `2026-06-12T23:51:15Z` | Lambda response and DynamoDB `latest-url-status`: `status_code=404`, `is_up=false`, `latency_ms=190` |
+| SNS alert published | `2026-06-12T23:51:15Z` | Lambda log: `DOWN alert sent`; CloudWatch `AlertsSent` metric sum reached `1` |
+| Repeat DOWN check deduped | `2026-06-12T23:51:55Z` | Lambda response: `status_code=404`, `is_up=false`; no second `DOWN alert sent` log line |
+| Dashboard showed DOWN | `2026-06-12T23:51:41Z` | [dashboard DOWN screenshot](screenshots/failure-drill-02-dashboard-down.jpg) |
+| Recovery confirmed | `2026-06-12T23:52:37Z` | Lambda response and DynamoDB `latest-url-status`: `status_code=200`, `is_up=true`, `latency_ms=179` |
+| Recovery alert published | `2026-06-12T23:52:37Z` | Lambda log: `RECOVERY alert sent`; CloudWatch `AlertsSent` metric sum reached `1` for the recovery minute |
+| Dashboard showed UP after recovery | `2026-06-12T23:53:12Z` | [dashboard recovery screenshot](screenshots/failure-drill-03-dashboard-recovered.jpg) |
+| CloudWatch metric/alarm check | `2026-06-12T23:53:49Z` | `URLsDown` metric reached `1` during outage; `cloudops-urls-down` alarm exists and was `OK` after recovery |
 
 ## Metrics To Capture
 
@@ -55,7 +64,18 @@ Fill this table during the drill. Use exact timestamps from CloudWatch Logs, SNS
 - Dashboard visibility latency: `dashboard showed DOWN - failed check stored`
 - Recovery latency: `dashboard showed UP - recovery started`
 
-After a real drill, copy the exact timings into this document so the project shows measured detection, alerting, dashboard visibility, and recovery behavior.
+Captured drill metrics:
+
+| Metric | Result |
+|---|---:|
+| Detection latency | `1 second` |
+| SNS publish latency | `0 seconds` from failed check log timestamp |
+| Dashboard DOWN visibility latency | `26 seconds` |
+| Recovery check latency | `1 second` |
+| Dashboard recovery visibility latency | `36 seconds` |
+| Duplicate DOWN alerts during sustained outage | `0` repeated alerts on the second failed check |
+
+SNS email receipt was not captured in this repository because the subscribed mailbox is outside the repo and local browser session. The Lambda publish log and `AlertsSent` custom metric confirm SNS publication; email delivery should be verified from the subscribed inbox during a human-attended drill.
 
 ## Latest Validation Status
 
@@ -66,4 +86,4 @@ Code-level validation is complete in the Lambda test suite:
 - one recovery alert is sent for `DOWN -> UP`
 - unsafe metadata targets are blocked before an outbound request
 
-Live AWS evidence still needs a controlled public endpoint and screenshots from SNS, CloudWatch, and the dashboard. Do not fabricate these timestamps; record them only after an actual drill.
+Live AWS evidence was captured on 2026-06-12 using the controlled CloudFront endpoint above. Do not overwrite these values unless a new drill is run end-to-end.
