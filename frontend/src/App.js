@@ -95,10 +95,56 @@ function App() {
   const isValidUrl = (value) => {
     try {
       const parsed = new URL(value);
-      return parsed.protocol === "http:" || parsed.protocol === "https:";
+      return (
+        (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+        !parsed.username &&
+        !parsed.password &&
+        !isUnsafeHostname(parsed.hostname)
+      );
     } catch {
       return false;
     }
+  };
+
+  const isUnsafeHostname = (value) => {
+    const hostname = value.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+
+    if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+      return true;
+    }
+
+    if (hostname === "::1") {
+      return true;
+    }
+
+    return isUnsafeIpv4(hostname);
+  };
+
+  const isUnsafeIpv4 = (value) => {
+    const octets = value.split(".");
+
+    if (octets.length !== 4 || octets.some((part) => !/^\d+$/.test(part))) {
+      return false;
+    }
+
+    const numbers = octets.map(Number);
+
+    if (numbers.some((part) => part < 0 || part > 255)) {
+      return true;
+    }
+
+    const [first, second] = numbers;
+
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      first >= 224 ||
+      (first === 100 && second >= 64 && second <= 127) ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    );
   };
 
   const addUrl = async () => {
@@ -110,7 +156,7 @@ function App() {
     }
 
     if (!isValidUrl(normalizedUrl)) {
-      showToast("error", "Enter a valid URL, for example https://example.com.");
+      showToast("error", "Enter a public http or https URL.");
       return;
     }
 

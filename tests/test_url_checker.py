@@ -21,6 +21,13 @@ class FakeTable:
     def put_item(self, Item):
         self.items.append(Item)
 
+    def get_item(self, Key):
+        for item in reversed(self.items):
+            if item.get("url") == Key["url"]:
+                return {"Item": item}
+
+        return {}
+
     def scan(self, **_kwargs):
         if self.pages is not None:
             page = self.pages[self.scan_calls]
@@ -138,6 +145,93 @@ class UrlCheckerTests(unittest.TestCase):
         self.assertIn("MonitoredURLCount", metric_names)
         self.assertIn("CheckRunDurationMs", metric_names)
         self.assertIn("URLCheckLatencyMs", metric_names)
+
+    def test_classify_status_change_deduplicates_persistent_down_state(self):
+        url_checker = load_url_checker()
+
+        self.assertEqual(url_checker.classify_status_change(True, False), "down")
+        self.assertIsNone(url_checker.classify_status_change(False, False))
+        self.assertEqual(url_checker.classify_status_change(False, True), "recovery")
+        self.assertIsNone(url_checker.classify_status_change(True, True))
+        self.assertEqual(url_checker.classify_status_change(None, False), "down")
+        self.assertIsNone(url_checker.classify_status_change(None, True))
+
+    def test_send_alert_uses_recovery_subject(self):
+        url_checker = load_url_checker()
+        sns = FakeSnsClient()
+        url_checker.sns = sns
+
+        url_checker.send_alert({
+            "url": "https://example.com",
+            "timestamp": "2026-06-12T00:00:00Z",
+            "status_code": 200,
+            "latency_ms": 50,
+        }, "recovery")
+
+        self.assertEqual(sns.published[0]["Subject"], "[RECOVERY] https://example.com")
+        self.assertIn("RECOVERED", sns.published[0]["Message"])
+
+    def test_check_url_blocks_unsafe_metadata_target(self):
+        url_checker = load_url_checker()
+
+        result = url_checker.check_url("http://169.254.169.254/latest/meta-data")
+
+        self.assertFalse(result["is_up"])
+        self.assertEqual(result["status_code"], 0)
+        self.assertEqual(result["latency_ms"], 0)
+
+    def test_checker_sends_only_state_change_alerts(self):
+        url_checker = load_url_checker()
+        sns = FakeSnsClient()
+        url_checker.sns = sns
+        url_checker.urls_table = FakeTable()
+        url_checker.urls_table.items = [{"url": "https://example.com"}]
+        url_checker.checks_table = FakeTable()
+        url_checker.latest_status_table = FakeTable()
+
+        with patch.object(url_checker, "check_url", return_value={
+            "url": "https://example.com",
+            "timestamp": "2026-06-12T00:00:00Z",
+            "status_code": 500,
+            "latency_ms": 100,
+            "is_up": False,
+        }):
+            first_response = url_checker.lambda_handler({}, None)
+            second_response = url_checker.lambda_handler({}, None)
+
+        self.assertEqual(first_response["statusCode"], 200)
+        self.assertEqual(second_response["statusCode"], 200)
+        self.assertEqual(len(sns.published), 1)
+        self.assertEqual(sns.published[0]["Subject"], "[DOWN] https://example.com")
+
+    def test_checker_sends_recovery_after_down_state(self):
+        url_checker = load_url_checker()
+        sns = FakeSnsClient()
+        url_checker.sns = sns
+        url_checker.urls_table = FakeTable()
+        url_checker.urls_table.items = [{"url": "https://example.com"}]
+        url_checker.checks_table = FakeTable()
+        url_checker.latest_status_table = FakeTable()
+        url_checker.latest_status_table.items = [{
+            "url": "https://example.com",
+            "timestamp": "2026-06-12T00:00:00Z",
+            "status_code": 500,
+            "latency_ms": 100,
+            "is_up": False,
+        }]
+
+        with patch.object(url_checker, "check_url", return_value={
+            "url": "https://example.com",
+            "timestamp": "2026-06-12T00:05:00Z",
+            "status_code": 200,
+            "latency_ms": 75,
+            "is_up": True,
+        }):
+            response = url_checker.lambda_handler({}, None)
+
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(len(sns.published), 1)
+        self.assertEqual(sns.published[0]["Subject"], "[RECOVERY] https://example.com")
 
 
 if __name__ == "__main__":

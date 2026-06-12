@@ -69,6 +69,24 @@ class ApiHandlerTests(unittest.TestCase):
         self.assertFalse(api_handler.is_valid_url("ftp://example.com"))
         self.assertTrue(api_handler.is_valid_url("https://example.com"))
 
+    def test_is_valid_url_rejects_unsafe_targets(self):
+        api_handler = load_api_handler()
+
+        unsafe_urls = [
+            "http://localhost:8080",
+            "http://service.localhost",
+            "http://127.0.0.1",
+            "http://10.0.0.10",
+            "http://172.16.0.10",
+            "http://192.168.1.10",
+            "http://169.254.169.254/latest/meta-data",
+            "http://[::1]",
+        ]
+
+        for url in unsafe_urls:
+            with self.subTest(url=url):
+                self.assertFalse(api_handler.is_valid_url(url))
+
     def test_add_url_stores_normalized_url(self):
         api_handler = load_api_handler()
         table = FakeTable()
@@ -78,6 +96,17 @@ class ApiHandlerTests(unittest.TestCase):
 
         self.assertEqual(response["statusCode"], 201)
         self.assertEqual(table.items, [{"url": "https://example.com"}])
+
+    def test_add_url_rejects_unsafe_target(self):
+        api_handler = load_api_handler()
+        table = FakeTable()
+        api_handler.urls_table = table
+
+        response = api_handler.add_url("http://169.254.169.254/latest/meta-data", {})
+
+        self.assertEqual(response["statusCode"], 400)
+        self.assertEqual(table.items, [])
+        self.assertIn("public http or https", response["body"])
 
     def test_response_headers_use_allowed_origin_not_wildcard(self):
         api_handler = load_api_handler()

@@ -6,6 +6,14 @@ Use this drill to prove downtime detection, alerting, dashboard state, and recov
 
 Validate that a failed URL is detected within one 5-minute EventBridge interval and that the failure is visible in SNS, CloudWatch metrics, Lambda logs, and the dashboard.
 
+## Alert Behavior Under Test
+
+- `UP -> DOWN`: sends one downtime alert.
+- `DOWN -> DOWN`: records the failed check and metrics without repeated SNS email.
+- `DOWN -> UP`: sends one recovery alert.
+
+The state-transition logic is covered by Lambda unit tests. A live drill should use a controllable public endpoint so the same URL can be moved from healthy to failing and back to healthy.
+
 ## Preconditions
 
 - Terraform apply completed successfully.
@@ -48,3 +56,14 @@ Fill this table during the drill. Use exact timestamps from CloudWatch Logs, SNS
 - Recovery latency: `dashboard showed UP - recovery started`
 
 After a real drill, copy the exact timings into this document so the project shows measured detection, alerting, dashboard visibility, and recovery behavior.
+
+## Latest Validation Status
+
+Code-level validation is complete in the Lambda test suite:
+
+- one downtime alert is sent for the first `UP -> DOWN` transition
+- no repeated alert is sent for continued `DOWN -> DOWN` checks
+- one recovery alert is sent for `DOWN -> UP`
+- unsafe metadata targets are blocked before an outbound request
+
+Live AWS evidence still needs a controlled public endpoint and screenshots from SNS, CloudWatch, and the dashboard. Do not fabricate these timestamps; record them only after an actual drill.

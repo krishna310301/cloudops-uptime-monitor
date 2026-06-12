@@ -307,8 +307,17 @@ resource "aws_sqs_queue" "api_handler_dlq" {
 # Lambda — URL Checker
 data "archive_file" "url_checker_zip" {
   type        = "zip"
-  source_file = "${path.module}/../lambda/url_checker.py"
   output_path = "${path.module}/../lambda/url_checker.zip"
+
+  source {
+    content  = file("${path.module}/../lambda/url_checker.py")
+    filename = "url_checker.py"
+  }
+
+  source {
+    content  = file("${path.module}/../lambda/url_validation.py")
+    filename = "url_validation.py"
+  }
 }
 
 resource "aws_lambda_function" "url_checker" {
@@ -351,8 +360,17 @@ resource "aws_lambda_function" "url_checker" {
 # Lambda — API Handler
 data "archive_file" "api_handler_zip" {
   type        = "zip"
-  source_file = "${path.module}/../lambda/api_handler.py"
   output_path = "${path.module}/../lambda/api_handler.zip"
+
+  source {
+    content  = file("${path.module}/../lambda/api_handler.py")
+    filename = "api_handler.py"
+  }
+
+  source {
+    content  = file("${path.module}/../lambda/url_validation.py")
+    filename = "url_validation.py"
+  }
 }
 
 resource "aws_lambda_function" "api_handler" {

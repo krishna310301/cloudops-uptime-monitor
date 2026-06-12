@@ -1,4 +1,4 @@
-# Measured Results
+# Engineering Outcomes
 
 This project uses small, reproducible measurements rather than unverifiable production traffic claims.
 
@@ -14,7 +14,7 @@ baseline candidate rows  = monitored URLs * 8,640
 improved current rows    = monitored URLs
 ```
 
-| Demo workload | Baseline candidate records | Improved current records | Reduction |
+| Reference workload | Baseline candidate records | Improved current records | Reduction |
 |---:|---:|---:|---:|
 | 1 URL | 8,640 | 1 | 99.9884% |
 | 5 URLs | 43,200 | 5 | 99.9884% |
@@ -31,7 +31,7 @@ The project now publishes application-level metrics in the `CloudOps/UptimeMonit
 | `URLsDown` | Count of failing URLs per scheduled run |
 | `URLCheckLatencyMs` | Per-URL HTTP response latency |
 | `CheckRunDurationMs` | End-to-end Lambda checker duration |
-| `AlertsSent` | Count of SNS downtime alerts published |
+| `AlertsSent` | Count of SNS downtime and recovery alerts published |
 | `MonitoredURLCount` | Size of the monitored URL fleet |
 | `StatusLookupRecordsRead` | Number of current-status rows returned to the dashboard |
 | `URLAdded` | Count of dashboard add operations |
@@ -46,6 +46,7 @@ The project now publishes application-level metrics in the `CloudOps/UptimeMonit
 | Throttling | None | 10 requests/second steady-state |
 | Burst limit | None | 20 requests |
 | Daily quota | None | 10,000 requests/day |
+| URL target safety | Basic http/https validation | Blocks unsafe literal targets at API ingress and unsafe resolved or redirected targets at check time |
 
 API Gateway API keys are used here for throttling and quota control. For user identity and role-aware access, the production upgrade path is Cognito or IAM authorization.
 
@@ -53,6 +54,6 @@ API Gateway API keys are used here for throttling and quota control. For user id
 
 | Area | Previous | Current |
 |---|---:|---:|
-| Lambda tests | 4 | 12 |
-| Frontend tests | 1 placeholder | 4 functional dashboard tests |
+| Lambda tests | 4 | 19 |
+| Frontend tests | 1 placeholder | 5 functional dashboard tests |
 | CI jobs | Terraform + deploy checks | Lambda tests, Python security scan, frontend test/build, Terraform validation, Terraform security scan |

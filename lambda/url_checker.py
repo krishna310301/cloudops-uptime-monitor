@@ -6,6 +6,11 @@ import time
 import os
 from datetime import datetime, timezone, timedelta
 
+try:
+    from .url_validation import validate_monitor_url
+except ImportError:
+    from url_validation import validate_monitor_url
+
 AWS_REGION = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
 dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
 
@@ -33,10 +38,12 @@ def lambda_handler(event, context):
     results = []
     alerts_sent = 0
     for url in urls:
+        previous_status = get_previous_status(url)
         result = check_url(url)
         save_to_dynamodb(result)
-        if not result['is_up']:
-            send_alert(result)
+        alert_type = classify_status_change(previous_status, result['is_up'])
+        if alert_type:
+            send_alert(result, alert_type)
             alerts_sent += 1
         results.append(result)
         print(f"Checked {url}: up={result['is_up']} status={result['status_code']} latency={result['latency_ms']}ms")
@@ -72,7 +79,9 @@ def check_url(url):
     timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     start_time = time.time()
 
-    if not is_supported_url(url):
+    is_valid, reason = validate_monitor_url(url, resolve_host=True)
+    if not is_valid:
+        print(f"Blocked unsafe URL {url}: {reason}")
         return {
             'url': url,
             'timestamp': timestamp,
@@ -86,8 +95,8 @@ def check_url(url):
             url,
             headers={'User-Agent': 'CloudOps-Uptime-Monitor/1.0'}
         )
-        # is_supported_url restricts checks to http/https before urlopen.
-        with urllib.request.urlopen(req, timeout=10) as response:  # nosec B310
+        opener = urllib.request.build_opener(SafeRedirectHandler)
+        with opener.open(req, timeout=10) as response:  # nosec B310
             status_code = response.getcode()
             latency_ms = round((time.time() - start_time) * 1000)
             is_up = status_code < 400
@@ -111,8 +120,43 @@ def check_url(url):
         'is_up': is_up
     }
 
-def is_supported_url(url):
-    return url.startswith(('http://', 'https://'))
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        is_valid, reason = validate_monitor_url(newurl, resolve_host=True)
+        if not is_valid:
+            raise urllib.error.HTTPError(
+                req.full_url,
+                403,
+                f"Blocked unsafe redirect: {reason}",
+                headers,
+                fp
+            )
+
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+def get_previous_status(url):
+    try:
+        response = latest_status_table.get_item(Key={'url': url})
+        item = response.get('Item')
+        if item is None:
+            return None
+
+        return bool(item.get('is_up'))
+    except Exception as e:
+        print(f"Could not read previous status for {url}: {str(e)}")
+        return None
+
+def classify_status_change(previous_is_up, current_is_up):
+    if previous_is_up is None:
+        return 'down' if not current_is_up else None
+
+    if previous_is_up and not current_is_up:
+        return 'down'
+
+    if not previous_is_up and current_is_up:
+        return 'recovery'
+
+    return None
 
 def save_to_dynamodb(result):
     ttl = int((datetime.now(timezone.utc) + timedelta(days=RESULT_TTL_DAYS)).timestamp())
@@ -129,24 +173,33 @@ def save_to_dynamodb(result):
     checks_table.put_item(Item=item)
     latest_status_table.put_item(Item=item)
 
-def send_alert(result):
-    message = f"""
-CloudOps Uptime Monitor — ALERT
+def send_alert(result, alert_type='down'):
+    if alert_type == 'recovery':
+        subject_prefix = 'RECOVERY'
+        headline = 'URL has RECOVERED'
+        action = 'No immediate action required. Continue watching recent checks.'
+    else:
+        subject_prefix = 'DOWN'
+        headline = 'URL is DOWN'
+        action = 'Immediate action may be required.'
 
-URL is DOWN: {result['url']}
+    message = f"""
+CloudOps Uptime Monitor — {subject_prefix}
+
+{headline}: {result['url']}
 Timestamp: {result['timestamp']}
 Status Code: {result['status_code']}
 Latency: {result['latency_ms']}ms
 
-Immediate action may be required.
+{action}
 — CloudOps Uptime Monitor
 """
     sns.publish(
         TopicArn=SNS_TOPIC_ARN,
-        Subject=f"[DOWN] {result['url']}",
+        Subject=f"[{subject_prefix}] {result['url']}",
         Message=message
     )
-    print(f"Alert sent for {result['url']}")
+    print(f"{subject_prefix} alert sent for {result['url']}")
 
 def publish_check_metrics(results, alerts_sent, run_start):
     urls_checked = len(results)

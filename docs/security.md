@@ -5,6 +5,8 @@
 - API Gateway requires an API key for dashboard API calls except CORS preflight.
 - API Gateway usage plan limits dashboard traffic to 10 requests/second, 20 burst requests, and 10,000 requests/day by default.
 - CORS is restricted to configured origins, defaulting to the CloudFront dashboard domain.
+- URL submission blocks localhost, private IP ranges, loopback, link-local, reserved targets, AWS metadata IP, userinfo credentials, and non-http schemes.
+- The checker revalidates monitor targets at runtime and blocks redirects to unsafe resolved addresses before following them.
 - The frontend S3 bucket blocks public access and is read through CloudFront Origin Access Control.
 - The frontend bucket has versioning and server-side encryption enabled.
 - DynamoDB tables use TTL for retained check history, point-in-time recovery, and customer-managed KMS encryption.
@@ -21,6 +23,7 @@
 - A production multi-user dashboard should use Cognito, IAM authorization, or another identity provider.
 - The dashboard API key is present in the browser build, so it should be treated as a traffic-control key, not a secret.
 - URL checks originate from Lambda public egress. A production monitor may need multiple regions or controlled network vantage points.
+- DNS can change after validation. For stricter SSRF protection, run checks through controlled egress with network firewall rules or an allowlist model.
 
 ## Recommended Production Upgrades
 

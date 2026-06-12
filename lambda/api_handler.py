@@ -4,7 +4,11 @@ import boto3
 from decimal import Decimal
 from json import JSONDecodeError
 from urllib.parse import unquote
-from urllib.parse import urlparse
+
+try:
+    from .url_validation import normalize_url, validate_monitor_url
+except ImportError:
+    from url_validation import normalize_url, validate_monitor_url
 
 class InvalidJsonBody(Exception):
     pass
@@ -147,7 +151,7 @@ def add_url(url, headers):
         return {
             'statusCode': 400,
             'headers': headers,
-            'body': json.dumps({'error': 'Valid http or https URL is required'})
+            'body': json.dumps({'error': 'Valid public http or https URL is required'})
         }
 
     urls_table.put_item(Item={'url': normalized_url})
@@ -171,7 +175,7 @@ def delete_url(url, headers):
         return {
             'statusCode': 400,
             'headers': headers,
-            'body': json.dumps({'error': 'Valid http or https URL is required'})
+            'body': json.dumps({'error': 'Valid public http or https URL is required'})
         }
 
     urls_table.delete_item(Key={'url': normalized_url})
@@ -194,22 +198,9 @@ def get_status(headers):
         'body': json.dumps({'results': results}, cls=DecimalEncoder)
     }
 
-def normalize_url(value):
-    url = (value or '').strip()
-    if not url:
-        return ''
-
-    if not url.startswith(('http://', 'https://')):
-        url = f'https://{url}'
-
-    return url
-
 def is_valid_url(value):
-    try:
-        parsed = urlparse(value)
-        return parsed.scheme in ('http', 'https') and bool(parsed.netloc)
-    except Exception:
-        return False
+    is_valid, _reason = validate_monitor_url(value, resolve_host=False)
+    return is_valid
 
 def put_metric(metric_name, value, unit):
     try:

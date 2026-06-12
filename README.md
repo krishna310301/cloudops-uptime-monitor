@@ -18,7 +18,7 @@ From the dashboard, I can:
 
 ---
 
-## Measured Results
+## Engineering Outcomes
 
 | Improvement | Result |
 | --- | --- |
@@ -26,6 +26,8 @@ From the dashboard, I can:
 | Custom observability | Added 9 application-level CloudWatch metrics in `CloudOps/UptimeMonitor` |
 | API abuse controls | Added API key enforcement, 10 req/sec throttling, 20-request burst limit, and 10,000 request/day quota |
 | CORS posture | Changed from wildcard browser access to configured allowed origins, defaulting to the CloudFront dashboard |
+| Alert behavior | Added state-change alerting so sustained outages do not send repeated SNS emails, while recovery events still notify |
+| URL safety | Blocks localhost, private IP ranges, loopback, link-local, reserved targets, AWS metadata IP, and unsafe redirects |
 | Validation | Added backend, frontend, Terraform, and security checks for Lambda handlers, dashboard states, IaC validation, and code scanning |
 
 See [docs/metrics.md](docs/metrics.md) for formulas and operating assumptions.
@@ -47,36 +49,23 @@ See [docs/metrics.md](docs/metrics.md) for formulas and operating assumptions.
 
 ## Architecture
 
-```
-React Dashboard (CloudFront + S3)
-         |
-         | HTTPS
-         v
-    API Gateway
-         |
-         v
-  Lambda API Handler
-         |
-         v
-      DynamoDB
- (URLs, history, latest status)
-         |
-EventBridge (every 5 min)
-         |
-         v
-  Lambda URL Checker
-         |
-    checks URLs
-         |
-    stores history + latest status ──► DynamoDB
-         |
-    if DOWN ─────────► SNS Email Alert
+```mermaid
+flowchart LR
+    User["User"] --> CloudFront["CloudFront + private S3 React dashboard"]
+    CloudFront --> ApiGateway["API Gateway REST API"]
+    ApiGateway --> ApiLambda["API Handler Lambda"]
+    ApiLambda --> UrlTable["DynamoDB monitored-urls"]
+    ApiLambda --> LatestTable["DynamoDB latest-url-status"]
 
-Observability:
-CloudWatch Logs + Custom Metrics + Alarms + Dashboard
+    EventBridge["EventBridge 5-minute schedule"] --> Checker["URL Checker Lambda"]
+    Checker --> UrlTable
+    Checker --> ChecksTable["DynamoDB uptime-checks history"]
+    Checker --> LatestTable
+    Checker --> Sns["SNS email alerts"]
+    Checker --> CloudWatch["CloudWatch logs, metrics, alarms, dashboard"]
 
-Delivery:
-Terraform IaC + GitHub Actions CI/CD
+    ApiGateway --> CloudWatch
+    ApiLambda --> CloudWatch
 ```
 
 ---
@@ -86,9 +75,11 @@ Terraform IaC + GitHub Actions CI/CD
 - **Automated monitoring** — EventBridge triggers URL checks every 5 minutes
 - **Real-time dashboard** — React frontend showing live status, latency, response codes
 - **Instant alerts** — SNS email notifications when a site goes down
+- **Alert deduplication** — sends downtime alerts on `UP -> DOWN`, suppresses repeated `DOWN -> DOWN`, and sends recovery alerts on `DOWN -> UP`
 - **Historical data** — Check results stored in DynamoDB with TTL-based retention
 - **Efficient latest status** — dashboard reads the `latest-url-status` table instead of scanning retained history
 - **Add/remove URLs** — API endpoints to manage monitored websites
+- **URL safety checks** — blocks localhost, private IP ranges, AWS metadata IP, unsafe schemes, and unsafe redirects
 - **CloudWatch visibility** — dashboard tracking Lambda metrics, custom uptime metrics, lookup efficiency, errors, and duration
 - **API hardening** — API key requirement, usage plan throttling, daily quota, and restricted CORS
 - **Operational safeguards** — encrypted logs and data stores, Lambda DLQs, X-Ray tracing, API access logs, and CloudFront security headers
@@ -114,8 +105,8 @@ Terraform IaC + GitHub Actions CI/CD
 
 ## Operational Readiness
 
-- 12 Lambda unit tests cover URL normalization, API behavior, validation failures, metric publishing, TTL writes, and latest-status updates.
-- 4 React dashboard tests cover loading, empty, success, and failure states, including API key headers.
+- 19 Lambda unit tests cover URL normalization, unsafe target rejection, state-change alerting, recovery notifications, API behavior, metric publishing, TTL writes, and latest-status updates.
+- 5 React dashboard tests cover loading, empty, success, failure, API key headers, and unsafe URL rejection.
 - Terraform validation checks formatting and provider configuration before deployment.
 - Bandit scans Lambda handlers for Python security issues.
 - Checkov scans Terraform with documented tradeoffs for the low-cost public monitor architecture.
@@ -158,6 +149,7 @@ cloudops-uptime-monitor/
 │   ├── failure-drill.md    # downtime drill evidence template
 │   ├── runbook.md          # operational troubleshooting
 │   ├── security.md         # controls and tradeoffs
+│   ├── design-tradeoffs.md # architecture decisions
 │   └── cost.md             # workload cost model
 └── .github/
     └── workflows/

@@ -76,6 +76,22 @@ test("rejects invalid URL before calling add endpoint", async () => {
   await userEvent.type(screen.getByLabelText("Website URL"), "not a url");
   await userEvent.click(screen.getByText("Add URL"));
 
-  expect(screen.getByText(/Enter a valid URL/)).toBeInTheDocument();
+  expect(screen.getByText(/Enter a public http or https URL/)).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+});
+
+test("rejects unsafe URL before calling add endpoint", async () => {
+  global.fetch = jest
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ results: [] }))
+    .mockResolvedValueOnce(jsonResponse({ urls: [] }));
+
+  render(<App />);
+
+  await screen.findByText("No check results yet");
+  await userEvent.type(screen.getByLabelText("Website URL"), "http://169.254.169.254/latest/meta-data");
+  await userEvent.click(screen.getByText("Add URL"));
+
+  expect(screen.getByText(/Enter a public http or https URL/)).toBeInTheDocument();
   expect(global.fetch).toHaveBeenCalledTimes(2);
 });

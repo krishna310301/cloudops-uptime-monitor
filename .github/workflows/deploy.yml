@@ -153,8 +153,8 @@ jobs:
       - name: Package Lambda functions
         run: |
           cd lambda
-          zip -r url_checker.zip url_checker.py
-          zip -r api_handler.zip api_handler.py
+          zip -r url_checker.zip url_checker.py url_validation.py
+          zip -r api_handler.zip api_handler.py url_validation.py
 
       - name: Deploy URL checker Lambda
         run: |

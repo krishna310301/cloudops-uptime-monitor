@@ -19,10 +19,17 @@
 ## Alerts Are Not Arriving
 
 1. Confirm the SNS email subscription is confirmed.
-2. Check the URL checker logs for `Alert sent`.
-3. Check the `AlertsSent` custom metric.
+2. Check the URL checker logs for `DOWN alert sent` or `RECOVERY alert sent`.
+3. Check the `AlertsSent` custom metric. Sustained `DOWN -> DOWN` checks intentionally do not send repeated SNS emails.
 4. Verify the Lambda role has `sns:Publish` permission to the alert topic.
 5. Check spam/quarantine for the SNS email.
+
+## URL Is Rejected
+
+1. Confirm the URL uses `http` or `https`.
+2. Confirm the hostname is not localhost, loopback, private IP space, link-local, reserved, or the AWS metadata IP.
+3. Remove embedded username/password credentials from the URL.
+4. If the URL redirects, confirm every redirect target also resolves to a public address.
 
 ## Dashboard Status Looks Stale
 
