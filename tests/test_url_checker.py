@@ -13,22 +13,55 @@ class FakeDynamoResource:
 
 
 class FakeTable:
-    def __init__(self):
+    def __init__(self, pages=None):
         self.items = []
+        self.pages = pages
+        self.scan_calls = 0
 
     def put_item(self, Item):
         self.items.append(Item)
 
+    def scan(self, **_kwargs):
+        if self.pages is not None:
+            page = self.pages[self.scan_calls]
+            self.scan_calls += 1
+            return page
+
+        return {"Items": self.items}
+
 
 class FakeSnsClient:
+    def __init__(self):
+        self.published = []
+
     def publish(self, **_kwargs):
+        self.published.append(_kwargs)
         return {"MessageId": "test-message-id"}
 
 
+class FakeCloudWatchClient:
+    def __init__(self):
+        self.metric_calls = []
+
+    def put_metric_data(self, **kwargs):
+        self.metric_calls.append(kwargs)
+        return {}
+
+
 def load_url_checker():
+    fake_sns = FakeSnsClient()
+    fake_cloudwatch = FakeCloudWatchClient()
+
+    def fake_client(service_name, *_args, **_kwargs):
+        if service_name == "sns":
+            return fake_sns
+        if service_name == "cloudwatch":
+            return fake_cloudwatch
+        raise AssertionError(f"Unexpected client: {service_name}")
+
     fake_boto3 = types.SimpleNamespace(
         resource=lambda *_args, **_kwargs: FakeDynamoResource(),
-        client=lambda *_args, **_kwargs: FakeSnsClient(),
+        client=fake_client,
     )
 
     with patch.dict(sys.modules, {"boto3": fake_boto3}), patch.dict(
@@ -39,10 +72,12 @@ def load_url_checker():
 
 
 class UrlCheckerTests(unittest.TestCase):
-    def test_save_to_dynamodb_writes_ttl(self):
+    def test_save_to_dynamodb_writes_ttl_and_latest_status(self):
         url_checker = load_url_checker()
-        table = FakeTable()
-        url_checker.checks_table = table
+        checks_table = FakeTable()
+        latest_table = FakeTable()
+        url_checker.checks_table = checks_table
+        url_checker.latest_status_table = latest_table
         url_checker.RESULT_TTL_DAYS = 30
 
         now = int(time.time())
@@ -54,8 +89,55 @@ class UrlCheckerTests(unittest.TestCase):
             "is_up": True,
         })
 
-        self.assertGreaterEqual(table.items[0]["ttl"], now + (29 * 24 * 60 * 60))
-        self.assertLessEqual(table.items[0]["ttl"], now + (31 * 24 * 60 * 60))
+        self.assertEqual(len(checks_table.items), 1)
+        self.assertEqual(latest_table.items, checks_table.items)
+        self.assertGreaterEqual(checks_table.items[0]["ttl"], now + (29 * 24 * 60 * 60))
+        self.assertLessEqual(checks_table.items[0]["ttl"], now + (31 * 24 * 60 * 60))
+
+    def test_get_monitored_urls_paginates_results(self):
+        url_checker = load_url_checker()
+        url_checker.urls_table = FakeTable(pages=[
+            {
+                "Items": [{"url": "https://a.example.com"}],
+                "LastEvaluatedKey": {"url": "https://a.example.com"},
+            },
+            {"Items": [{"url": "https://b.example.com"}]},
+        ])
+
+        urls = url_checker.get_monitored_urls()
+
+        self.assertEqual(urls, ["https://a.example.com", "https://b.example.com"])
+
+    def test_publish_check_metrics_emits_operational_metrics(self):
+        url_checker = load_url_checker()
+        cloudwatch = FakeCloudWatchClient()
+        url_checker.cloudwatch = cloudwatch
+
+        url_checker.publish_check_metrics([
+            {
+                "url": "https://up.example.com",
+                "latency_ms": 120,
+                "is_up": True,
+            },
+            {
+                "url": "https://down.example.com",
+                "latency_ms": 900,
+                "is_up": False,
+            },
+        ], alerts_sent=1, run_start=time.time())
+
+        metric_names = {
+            metric["MetricName"]
+            for call in cloudwatch.metric_calls
+            for metric in call["MetricData"]
+        }
+
+        self.assertIn("URLsChecked", metric_names)
+        self.assertIn("URLsDown", metric_names)
+        self.assertIn("AlertsSent", metric_names)
+        self.assertIn("MonitoredURLCount", metric_names)
+        self.assertIn("CheckRunDurationMs", metric_names)
+        self.assertIn("URLCheckLatencyMs", metric_names)
 
 
 if __name__ == "__main__":

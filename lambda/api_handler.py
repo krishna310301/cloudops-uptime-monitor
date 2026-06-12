@@ -2,16 +2,26 @@ import json
 import os
 import boto3
 from decimal import Decimal
+from json import JSONDecodeError
 from urllib.parse import unquote
 from urllib.parse import urlparse
 
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 CHECKS_TABLE = os.environ.get('CHECKS_TABLE_NAME', 'uptime-checks')
 URLS_TABLE = os.environ.get('URLS_TABLE_NAME', 'monitored-urls')
+LATEST_STATUS_TABLE = os.environ.get('LATEST_STATUS_TABLE_NAME', 'latest-url-status')
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('ALLOWED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+METRIC_NAMESPACE = os.environ.get('METRIC_NAMESPACE', 'CloudOps/UptimeMonitor')
 
 dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
 checks_table = dynamodb.Table(CHECKS_TABLE)
 urls_table = dynamodb.Table(URLS_TABLE)
+latest_status_table = dynamodb.Table(LATEST_STATUS_TABLE)
+cloudwatch = boto3.client('cloudwatch', region_name=AWS_REGION)
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -22,13 +32,7 @@ class DecimalEncoder(json.JSONEncoder):
 def lambda_handler(event, context):
     method = event.get('httpMethod')
     path = event.get('path', '')
-    
-    headers = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
-    }
+    headers = response_headers(event)
     
     if method == 'OPTIONS':
         return {'statusCode': 200, 'headers': headers, 'body': ''}
@@ -38,11 +42,11 @@ def lambda_handler(event, context):
             return get_urls(headers)
         
         elif method == 'POST' and path == '/urls':
-            body = json.loads(event.get('body', '{}'))
+            body = parse_json_body(event)
             return add_url(body.get('url'), headers)
         
         elif method == 'DELETE' and path == '/urls':
-            body = json.loads(event.get('body', '{}'))
+            body = parse_json_body(event)
             return delete_url(body.get('url'), headers)
 
         elif method == 'DELETE' and path.startswith('/urls/'):
@@ -59,26 +63,59 @@ def lambda_handler(event, context):
                 'body': json.dumps({'error': 'Route not found'})
             }
     
+    except (JSONDecodeError, ValueError):
+        return error_response(400, 'Request body must be valid JSON', headers)
+
     except Exception as e:
         print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': headers,
-            'body': json.dumps({'error': str(e)})
-        }
+        return error_response(500, 'Internal server error', headers)
 
-def get_urls(headers):
-    urls = []
+def response_headers(event):
+    headers = event.get('headers') or {}
+    request_origin = headers.get('origin') or headers.get('Origin')
+    allow_origin = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else ''
+
+    if request_origin and request_origin in ALLOWED_ORIGINS:
+        allow_origin = request_origin
+
+    response = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Headers': 'Content-Type,X-Api-Key',
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
+    }
+
+    if allow_origin:
+        response['Access-Control-Allow-Origin'] = allow_origin
+        response['Vary'] = 'Origin'
+
+    return response
+
+def parse_json_body(event):
+    body = event.get('body') or '{}'
+    return json.loads(body)
+
+def error_response(status_code, message, headers):
+    return {
+        'statusCode': status_code,
+        'headers': headers,
+        'body': json.dumps({'error': message})
+    }
+
+def scan_all(table):
+    items = []
     scan_kwargs = {}
 
     while True:
-        response = urls_table.scan(**scan_kwargs)
-        urls.extend(item['url'] for item in response.get('Items', []))
+        response = table.scan(**scan_kwargs)
+        items.extend(response.get('Items', []))
 
         if 'LastEvaluatedKey' not in response:
-            break
+            return items
 
         scan_kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
+
+def get_urls(headers):
+    urls = [item['url'] for item in scan_all(urls_table)]
 
     return {
         'statusCode': 200,
@@ -103,6 +140,7 @@ def add_url(url, headers):
         }
 
     urls_table.put_item(Item={'url': normalized_url})
+    put_metric('URLAdded', 1, 'Count')
     return {
         'statusCode': 201,
         'headers': headers,
@@ -126,6 +164,8 @@ def delete_url(url, headers):
         }
 
     urls_table.delete_item(Key={'url': normalized_url})
+    latest_status_table.delete_item(Key={'url': normalized_url})
+    put_metric('URLDeleted', 1, 'Count')
     return {
         'statusCode': 200,
         'headers': headers,
@@ -133,41 +173,9 @@ def delete_url(url, headers):
     }
 
 def get_status(headers):
-    # Only show results for currently monitored URLs
-    monitored_urls = set()
-    url_scan_kwargs = {}
-
-    while True:
-        monitored = urls_table.scan(**url_scan_kwargs)
-        monitored_urls.update(item['url'] for item in monitored.get('Items', []))
-
-        if 'LastEvaluatedKey' not in monitored:
-            break
-
-        url_scan_kwargs['ExclusiveStartKey'] = monitored['LastEvaluatedKey']
-
-    items = []
-    checks_scan_kwargs = {}
-
-    while True:
-        response = checks_table.scan(**checks_scan_kwargs)
-        items.extend(response.get('Items', []))
-
-        if 'LastEvaluatedKey' not in response:
-            break
-
-        checks_scan_kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
-
-    latest = {}
-    for item in items:
-        url = item['url']
-        if url not in monitored_urls:
-            continue
-        if url not in latest or item['timestamp'] > latest[url]['timestamp']:
-            latest[url] = item
-
-    results = list(latest.values())
+    results = scan_all(latest_status_table)
     results.sort(key=lambda x: x['url'])
+    put_metric('StatusLookupRecordsRead', len(results), 'Count')
 
     return {
         'statusCode': 200,
@@ -191,3 +199,16 @@ def is_valid_url(value):
         return parsed.scheme in ('http', 'https') and bool(parsed.netloc)
     except Exception:
         return False
+
+def put_metric(metric_name, value, unit):
+    try:
+        cloudwatch.put_metric_data(
+            Namespace=METRIC_NAMESPACE,
+            MetricData=[{
+                'MetricName': metric_name,
+                'Value': value,
+                'Unit': unit
+            }]
+        )
+    except Exception as e:
+        print(f"Failed to publish metric {metric_name}: {str(e)}")

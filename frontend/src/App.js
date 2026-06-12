@@ -3,6 +3,24 @@ import "./App.css";
 
 const API_BASE =
   process.env.REACT_APP_API_BASE_URL || "";
+const API_KEY =
+  process.env.REACT_APP_API_KEY || "";
+
+const apiHeaders = (headers = {}) => {
+  const nextHeaders = { ...headers };
+
+  if (API_KEY) {
+    nextHeaders["X-Api-Key"] = API_KEY;
+  }
+
+  return nextHeaders;
+};
+
+const apiFetch = (path, options = {}) =>
+  fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: apiHeaders(options.headers),
+  });
 
 function App() {
   const [status, setStatus] = useState([]);
@@ -37,8 +55,8 @@ function App() {
       }
 
       const [statusRes, urlsRes] = await Promise.all([
-        fetch(`${API_BASE}/status`),
-        fetch(`${API_BASE}/urls`),
+        apiFetch("/status"),
+        apiFetch("/urls"),
       ]);
 
       if (!statusRes.ok || !urlsRes.ok) {
@@ -104,7 +122,7 @@ function App() {
         throw new Error("REACT_APP_API_BASE_URL is not configured");
       }
 
-      const res = await fetch(`${API_BASE}/urls`, {
+      const res = await apiFetch("/urls", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -138,7 +156,7 @@ function App() {
         throw new Error("REACT_APP_API_BASE_URL is not configured");
       }
 
-      const res = await fetch(`${API_BASE}/urls`, {
+      const res = await apiFetch("/urls", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",

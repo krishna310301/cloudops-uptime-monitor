@@ -16,6 +16,12 @@ provider "aws" {
   region = var.aws_region
 }
 
+locals {
+  metric_namespace     = "CloudOps/UptimeMonitor"
+  cors_allowed_origins = length(var.allowed_cors_origins) > 0 ? var.allowed_cors_origins : ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
+  primary_cors_origin  = local.cors_allowed_origins[0]
+}
+
 # DynamoDB — uptime checks
 resource "aws_dynamodb_table" "uptime_checks" {
   name         = "uptime-checks"
@@ -37,6 +43,10 @@ resource "aws_dynamodb_table" "uptime_checks" {
     enabled        = true
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = { Project = "cloudops-uptime-monitor" }
 }
 
@@ -49,6 +59,33 @@ resource "aws_dynamodb_table" "monitored_urls" {
   attribute {
     name = "url"
     type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = { Project = "cloudops-uptime-monitor" }
+}
+
+# DynamoDB — latest status lookup
+resource "aws_dynamodb_table" "latest_status" {
+  name         = "latest-url-status"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "url"
+
+  attribute {
+    name = "url"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
   }
 
   tags = { Project = "cloudops-uptime-monitor" }
@@ -88,8 +125,20 @@ resource "aws_iam_role_policy" "lambda_least_privilege" {
         ]
         Resource = [
           aws_dynamodb_table.uptime_checks.arn,
-          aws_dynamodb_table.monitored_urls.arn
+          aws_dynamodb_table.monitored_urls.arn,
+          aws_dynamodb_table.latest_status.arn
         ]
+      },
+      {
+        Sid      = "CloudWatchMetrics"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = local.metric_namespace
+          }
+        }
       },
       {
         Sid      = "SNSPublish"
@@ -157,11 +206,13 @@ resource "aws_lambda_function" "url_checker" {
 
   environment {
     variables = {
-      CHECKS_TABLE_NAME = aws_dynamodb_table.uptime_checks.name
-      URLS_TABLE_NAME   = aws_dynamodb_table.monitored_urls.name
-      SNS_TOPIC_ARN     = aws_sns_topic.uptime_alerts.arn
-      AWS_REGION        = var.aws_region
-      RESULT_TTL_DAYS   = tostring(var.result_ttl_days)
+      CHECKS_TABLE_NAME        = aws_dynamodb_table.uptime_checks.name
+      URLS_TABLE_NAME          = aws_dynamodb_table.monitored_urls.name
+      LATEST_STATUS_TABLE_NAME = aws_dynamodb_table.latest_status.name
+      SNS_TOPIC_ARN            = aws_sns_topic.uptime_alerts.arn
+      AWS_REGION               = var.aws_region
+      RESULT_TTL_DAYS          = tostring(var.result_ttl_days)
+      METRIC_NAMESPACE         = local.metric_namespace
     }
   }
 
@@ -189,9 +240,12 @@ resource "aws_lambda_function" "api_handler" {
 
   environment {
     variables = {
-      CHECKS_TABLE_NAME = aws_dynamodb_table.uptime_checks.name
-      URLS_TABLE_NAME   = aws_dynamodb_table.monitored_urls.name
-      AWS_REGION        = var.aws_region
+      CHECKS_TABLE_NAME        = aws_dynamodb_table.uptime_checks.name
+      URLS_TABLE_NAME          = aws_dynamodb_table.monitored_urls.name
+      LATEST_STATUS_TABLE_NAME = aws_dynamodb_table.latest_status.name
+      AWS_REGION               = var.aws_region
+      ALLOWED_ORIGINS          = join(",", local.cors_allowed_origins)
+      METRIC_NAMESPACE         = local.metric_namespace
     }
   }
 
@@ -234,10 +288,19 @@ resource "aws_api_gateway_resource" "proxy" {
 }
 
 resource "aws_api_gateway_method" "proxy_any" {
-  rest_api_id   = aws_api_gateway_rest_api.uptime_api.id
-  resource_id   = aws_api_gateway_resource.proxy.id
-  http_method   = "ANY"
-  authorization = "NONE"
+  rest_api_id      = aws_api_gateway_rest_api.uptime_api.id
+  resource_id      = aws_api_gateway_resource.proxy.id
+  http_method      = "ANY"
+  authorization    = "NONE"
+  api_key_required = true
+}
+
+resource "aws_api_gateway_method" "proxy_options" {
+  rest_api_id      = aws_api_gateway_rest_api.uptime_api.id
+  resource_id      = aws_api_gateway_resource.proxy.id
+  http_method      = "OPTIONS"
+  authorization    = "NONE"
+  api_key_required = false
 }
 
 resource "aws_api_gateway_integration" "proxy_lambda" {
@@ -249,6 +312,45 @@ resource "aws_api_gateway_integration" "proxy_lambda" {
   uri                     = aws_lambda_function.api_handler.invoke_arn
 }
 
+resource "aws_api_gateway_integration" "proxy_options" {
+  rest_api_id = aws_api_gateway_rest_api.uptime_api.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "proxy_options" {
+  rest_api_id = aws_api_gateway_rest_api.uptime_api.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Vary"                         = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "proxy_options" {
+  rest_api_id = aws_api_gateway_rest_api.uptime_api.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  status_code = aws_api_gateway_method_response.proxy_options.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Api-Key'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'${local.primary_cors_origin}'"
+    "method.response.header.Vary"                         = "'Origin'"
+  }
+}
+
 resource "aws_api_gateway_deployment" "uptime_api" {
   rest_api_id = aws_api_gateway_rest_api.uptime_api.id
 
@@ -256,7 +358,10 @@ resource "aws_api_gateway_deployment" "uptime_api" {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.proxy.id,
       aws_api_gateway_method.proxy_any.id,
-      aws_api_gateway_integration.proxy_lambda.id
+      aws_api_gateway_method.proxy_options.id,
+      aws_api_gateway_integration.proxy_lambda.id,
+      aws_api_gateway_integration.proxy_options.id,
+      aws_api_gateway_integration_response.proxy_options.id
     ]))
   }
 
@@ -271,6 +376,42 @@ resource "aws_api_gateway_stage" "prod" {
   stage_name    = "prod"
 }
 
+resource "aws_api_gateway_api_key" "dashboard" {
+  name        = "cloudops-uptime-dashboard-key"
+  description = "Dashboard API key used for throttling and quota enforcement"
+  enabled     = true
+
+  tags = { Project = "cloudops-uptime-monitor" }
+}
+
+resource "aws_api_gateway_usage_plan" "dashboard" {
+  name        = "cloudops-uptime-dashboard-usage-plan"
+  description = "Usage plan for CloudOps Uptime Monitor dashboard API"
+
+  api_stages {
+    api_id = aws_api_gateway_rest_api.uptime_api.id
+    stage  = aws_api_gateway_stage.prod.stage_name
+  }
+
+  throttle_settings {
+    burst_limit = var.api_throttle_burst_limit
+    rate_limit  = var.api_throttle_rate_limit
+  }
+
+  quota_settings {
+    limit  = var.api_daily_quota_limit
+    period = "DAY"
+  }
+
+  tags = { Project = "cloudops-uptime-monitor" }
+}
+
+resource "aws_api_gateway_usage_plan_key" "dashboard" {
+  key_id        = aws_api_gateway_api_key.dashboard.id
+  key_type      = "API_KEY"
+  usage_plan_id = aws_api_gateway_usage_plan.dashboard.id
+}
+
 resource "aws_lambda_permission" "apigateway" {
   statement_id  = "apigateway-invoke"
   action        = "lambda:InvokeFunction"
@@ -283,6 +424,24 @@ resource "aws_lambda_permission" "apigateway" {
 resource "aws_s3_bucket" "frontend" {
   bucket = var.s3_bucket_name
   tags   = { Project = "cloudops-uptime-monitor" }
+}
+
+resource "aws_s3_bucket_versioning" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
 resource "aws_s3_bucket_website_configuration" "frontend" {
@@ -447,6 +606,23 @@ resource "aws_cloudwatch_metric_alarm" "api_handler_errors" {
   tags = { Project = "cloudops-uptime-monitor" }
 }
 
+resource "aws_cloudwatch_metric_alarm" "urls_down" {
+  alarm_name          = "cloudops-urls-down"
+  alarm_description   = "At least one monitored URL failed the latest scheduled check"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "URLsDown"
+  namespace           = local.metric_namespace
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.uptime_alerts.arn]
+
+  tags = { Project = "cloudops-uptime-monitor" }
+}
+
 resource "aws_cloudwatch_dashboard" "uptime_monitor" {
   dashboard_name = "CloudOps-Uptime-Monitor"
 
@@ -483,6 +659,42 @@ resource "aws_cloudwatch_dashboard" "uptime_monitor" {
           metrics = [
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.url_checker.function_name, { stat = "Average" }],
             [".", ".", ".", aws_lambda_function.api_handler.function_name, { stat = "Average" }]
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Custom Uptime Metrics"
+          region  = var.aws_region
+          view    = "timeSeries"
+          stacked = false
+          metrics = [
+            [local.metric_namespace, "URLsChecked", { stat = "Sum" }],
+            [".", "URLsDown", { stat = "Sum" }],
+            [".", "AlertsSent", { stat = "Sum" }],
+            [".", "MonitoredURLCount", { stat = "Maximum" }]
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Status Lookup Efficiency"
+          region  = var.aws_region
+          view    = "timeSeries"
+          stacked = false
+          metrics = [
+            [local.metric_namespace, "StatusLookupRecordsRead", { stat = "Average" }],
+            [".", "CheckRunDurationMs", { stat = "Average" }]
           ]
         }
       }

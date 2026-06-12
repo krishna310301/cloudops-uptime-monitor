@@ -18,6 +18,22 @@ output "frontend_bucket_name" {
   value       = aws_s3_bucket.frontend.bucket
 }
 
+output "dashboard_api_key_id" {
+  description = "API Gateway key ID for dashboard traffic"
+  value       = aws_api_gateway_api_key.dashboard.id
+}
+
+output "dashboard_api_key_value" {
+  description = "API Gateway key value to store as REACT_APP_API_KEY for the frontend build"
+  value       = aws_api_gateway_api_key.dashboard.value
+  sensitive   = true
+}
+
+output "latest_status_table_name" {
+  description = "DynamoDB table used for efficient current-status dashboard reads"
+  value       = aws_dynamodb_table.latest_status.name
+}
+
 output "lambda_url_checker_arn" {
   description = "URL checker Lambda ARN"
   value       = aws_lambda_function.url_checker.arn

@@ -1,6 +1,6 @@
 # CloudOps Uptime Monitor
 
-CloudOps Uptime Monitor is a serverless website uptime monitoring system built on AWS. It checks website availability every 5 minutes, stores recent status history, sends alerts on downtime, and displays live status through a React dashboard served by CloudFront.
+CloudOps Uptime Monitor is a serverless website uptime monitoring system built on AWS. It checks website availability every 5 minutes, stores recent status history, maintains an efficient latest-status view, sends alerts on downtime, publishes custom CloudWatch metrics, and displays live status through a React dashboard served by CloudFront.
 
 I built this after working in operations environments where a simple question like "is the service actually reachable?" needed a fast, trustworthy answer. This project keeps that workflow small and practical: scheduled checks, recent history, alerting, and a dashboard that makes the current state easy to scan.
 
@@ -13,6 +13,20 @@ From the dashboard, I can:
 - Track response latency and HTTP status codes per site
 - Receive SNS email alerts when a monitored site goes down
 - Watch the view refresh automatically every 30 seconds
+
+---
+
+## Measured Results
+
+| Improvement | Result |
+| --- | --- |
+| Current-status lookup | Reduced candidate records from 86,400 historical rows to 10 latest-status rows for a 10-URL, 30-day demo workload |
+| Custom observability | Added 9 application-level CloudWatch metrics in `CloudOps/UptimeMonitor` |
+| API abuse controls | Added API key enforcement, 10 req/sec throttling, 20-request burst limit, and 10,000 request/day quota |
+| CORS posture | Changed from wildcard browser access to configured allowed origins, defaulting to the CloudFront dashboard |
+| Validation | Added backend, frontend, Terraform, and security checks for Lambda handlers, dashboard states, IaC validation, and code scanning |
+
+See [docs/metrics.md](docs/metrics.md) for formulas and operating assumptions.
 
 ---
 
@@ -43,6 +57,7 @@ React Dashboard (CloudFront + S3)
          |
          v
       DynamoDB
+ (URLs, history, latest status)
          |
 EventBridge (every 5 min)
          |
@@ -51,12 +66,12 @@ EventBridge (every 5 min)
          |
     checks URLs
          |
-    stores results ──► DynamoDB
+    stores history + latest status ──► DynamoDB
          |
     if DOWN ─────────► SNS Email Alert
 
 Observability:
-CloudWatch Logs + Metrics + Alarms + Dashboard
+CloudWatch Logs + Custom Metrics + Alarms + Dashboard
 
 Delivery:
 Terraform IaC + GitHub Actions CI/CD
@@ -70,10 +85,12 @@ Terraform IaC + GitHub Actions CI/CD
 - **Real-time dashboard** — React frontend showing live status, latency, response codes
 - **Instant alerts** — SNS email notifications when a site goes down
 - **Historical data** — Check results stored in DynamoDB with TTL-based retention
+- **Efficient latest status** — dashboard reads the `latest-url-status` table instead of scanning retained history
 - **Add/remove URLs** — API endpoints to manage monitored websites
-- **CloudWatch visibility** — dashboard tracking Lambda invocations, errors, duration, and API Gateway metrics
+- **CloudWatch visibility** — dashboard tracking Lambda metrics, custom uptime metrics, lookup efficiency, errors, and duration
+- **API hardening** — API key requirement, usage plan throttling, daily quota, and restricted CORS
 - **Infrastructure as Code** — stack provisioned with Terraform
-- **CI/CD pipeline** — GitHub Actions runs Lambda tests, validates Terraform, deploys Lambda functions, builds the frontend, syncs S3, and invalidates CloudFront
+- **CI/CD pipeline** — GitHub Actions runs Lambda tests, frontend tests/build, Terraform validation, security scans, and manual AWS deployment
 
 ---
 
@@ -84,7 +101,7 @@ Terraform IaC + GitHub Actions CI/CD
 | Frontend       | React, private S3 origin, CloudFront        |
 | API            | API Gateway, Lambda (Python)                |
 | Scheduler      | EventBridge                                 |
-| Database       | DynamoDB                                    |
+| Database       | DynamoDB with TTL and latest-status access pattern |
 | Alerts         | SNS                                         |
 | Monitoring     | CloudWatch Logs, Metrics, Alarms, Dashboard |
 | Infrastructure | Terraform                                   |
@@ -95,7 +112,7 @@ Terraform IaC + GitHub Actions CI/CD
 ## AWS Services Used
 
 - **Lambda** — serverless URL checker and API handler
-- **DynamoDB** — stores uptime check results and monitored URLs
+- **DynamoDB** — stores monitored URLs, retained uptime check history, and latest URL status
 - **EventBridge** — scheduled rule triggering checks every 5 minutes
 - **API Gateway** — REST API for dashboard communication
 - **SNS** — email alerts on downtime detection
@@ -122,6 +139,12 @@ cloudops-uptime-monitor/
 │   ├── variables.tf        # configurable variables
 │   └── outputs.tf          # output values
 ├── tests/                  # Lambda handler unit tests
+├── docs/
+│   ├── metrics.md          # measured improvements and formulas
+│   ├── failure-drill.md    # downtime drill evidence template
+│   ├── runbook.md          # operational troubleshooting
+│   ├── security.md         # controls and tradeoffs
+│   └── cost.md             # demo workload cost model
 └── .github/
     └── workflows/
         └── deploy.yml      # CI/CD pipeline
@@ -146,9 +169,11 @@ cloudops-uptime-monitor/
 Every push and pull request validates the project. AWS deployment is manual-only through `workflow_dispatch` with `deploy_to_aws = true`.
 
 1. **Runs Lambda unit tests** — validates URL normalization, input validation, and TTL writes
-2. **Validates Terraform** — runs `terraform validate` and `terraform fmt -check`
-3. **Deploys Lambda functions** — zips and updates both Lambda functions
-4. **Builds and deploys frontend** — runs `npm ci` and `npm run build`, syncs to S3, invalidates CloudFront cache
+2. **Scans Lambda code** — runs Bandit against Python Lambda handlers
+3. **Runs frontend tests/build** — validates dashboard API states and API key headers
+4. **Validates Terraform** — runs `terraform validate` and `terraform fmt -check`
+5. **Scans Terraform security** — runs Checkov in advisory mode for IaC findings
+6. **Deploys manually** — zips Lambda functions, builds the frontend, syncs to S3, invalidates CloudFront cache
 
 Manual deployment uses GitHub Actions OIDC with `AWS_ROLE_TO_ASSUME`, avoiding long-lived AWS access keys in repository secrets.
 
@@ -156,15 +181,28 @@ Manual deployment uses GitHub Actions OIDC with `AWS_ROLE_TO_ASSUME`, avoiding l
 
 ## CloudWatch Monitoring
 
-Three alarms configured:
+Four alarms configured:
 
 - `cloudops-url-checker-errors` — fires when Lambda errors ≥ 1
 - `cloudops-url-checker-duration` — fires when avg duration ≥ 25 seconds
 - `cloudops-api-handler-errors` — fires when the API handler Lambda errors ≥ 1
+- `cloudops-urls-down` — fires when the custom `URLsDown` metric is ≥ 1
 
 All alarms publish to SNS for email notification.
 
 Dashboard: **CloudOps-Uptime-Monitor** in AWS CloudWatch console.
+
+Custom metrics published in `CloudOps/UptimeMonitor`:
+
+- `URLsChecked`
+- `URLsDown`
+- `URLCheckLatencyMs`
+- `CheckRunDurationMs`
+- `AlertsSent`
+- `MonitoredURLCount`
+- `StatusLookupRecordsRead`
+- `URLAdded`
+- `URLDeleted`
 
 ---
 
@@ -172,15 +210,15 @@ Dashboard: **CloudOps-Uptime-Monitor** in AWS CloudWatch console.
 
 Terraform provisions:
 
-- 2 DynamoDB tables
+- 3 DynamoDB tables
 - 2 Lambda functions
 - 1 IAM role with least-privilege policies
 - 1 EventBridge rule + target
-- 1 API Gateway REST API with Lambda proxy integration and prod stage
+- 1 API Gateway REST API with Lambda proxy integration, API key, usage plan, throttling, quota, and prod stage
 - 1 SNS topic + email subscription
-- 1 private S3 bucket for frontend assets
+- 1 private, encrypted, versioned S3 bucket for frontend assets
 - 1 CloudFront distribution with Origin Access Control
-- 3 CloudWatch alarms
+- 4 CloudWatch alarms
 - 1 CloudWatch dashboard
 
 ---
@@ -200,15 +238,16 @@ terraform apply
 After deployment:
 1. Confirm the SNS email subscription from your inbox
 2. Set `REACT_APP_API_BASE_URL` to the Terraform `api_url` output before building the frontend
-3. Open the CloudFront URL from Terraform outputs
-4. Add a URL from the dashboard
-5. Wait for the next EventBridge check cycle (every 5 minutes)
+3. Set `REACT_APP_API_KEY` to the sensitive Terraform `dashboard_api_key_value` output before building the frontend
+4. Open the CloudFront URL from Terraform outputs
+5. Add a URL from the dashboard
+6. Wait for the next EventBridge check cycle (every 5 minutes)
 
 ## Local Validation
 
 ```bash
 PYTHONPATH=. python -m unittest discover -s tests -v
-cd frontend && npm ci && npm run build
+cd frontend && npm ci && npm test -- --watchAll=false && npm run build
 cd ../terraform && terraform init -backend=false && terraform fmt -check && terraform validate
 ```
 
