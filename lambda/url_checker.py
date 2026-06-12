@@ -72,12 +72,22 @@ def check_url(url):
     timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     start_time = time.time()
 
+    if not is_supported_url(url):
+        return {
+            'url': url,
+            'timestamp': timestamp,
+            'status_code': 0,
+            'latency_ms': 0,
+            'is_up': False
+        }
+
     try:
         req = urllib.request.Request(
             url,
             headers={'User-Agent': 'CloudOps-Uptime-Monitor/1.0'}
         )
-        with urllib.request.urlopen(req, timeout=10) as response:
+        # is_supported_url restricts checks to http/https before urlopen.
+        with urllib.request.urlopen(req, timeout=10) as response:  # nosec B310
             status_code = response.getcode()
             latency_ms = round((time.time() - start_time) * 1000)
             is_up = status_code < 400
@@ -100,6 +110,9 @@ def check_url(url):
         'latency_ms': latency_ms,
         'is_up': is_up
     }
+
+def is_supported_url(url):
+    return url.startswith(('http://', 'https://'))
 
 def save_to_dynamodb(result):
     ttl = int((datetime.now(timezone.utc) + timedelta(days=RESULT_TTL_DAYS)).timestamp())

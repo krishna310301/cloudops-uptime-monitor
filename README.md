@@ -212,6 +212,8 @@ Terraform provisions:
 
 - 3 DynamoDB tables
 - 2 Lambda functions
+- 2 SQS dead-letter queues
+- 1 customer-managed KMS key
 - 1 IAM role with least-privilege policies
 - 1 EventBridge rule + target
 - 1 API Gateway REST API with Lambda proxy integration, API key, usage plan, throttling, quota, and prod stage

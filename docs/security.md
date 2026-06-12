@@ -7,8 +7,12 @@
 - CORS is restricted to configured origins, defaulting to the CloudFront dashboard domain.
 - The frontend S3 bucket blocks public access and is read through CloudFront Origin Access Control.
 - The frontend bucket has versioning and server-side encryption enabled.
-- DynamoDB tables use TTL for retained check history and point-in-time recovery for operational recovery.
-- Lambda IAM permissions are scoped to the required DynamoDB tables, SNS topic, log groups, and custom CloudWatch metric namespace.
+- DynamoDB tables use TTL for retained check history, point-in-time recovery, and customer-managed KMS encryption.
+- SNS, Lambda environment variables, SQS dead-letter queues, and CloudWatch log groups use the project customer-managed KMS key.
+- Lambda functions have X-Ray tracing enabled for request-level debugging.
+- Lambda functions send failed asynchronous invocations to SQS dead-letter queues with 14-day retention.
+- CloudWatch log groups retain logs for 365 days.
+- Lambda IAM permissions are scoped to the required DynamoDB tables, SNS topic, SQS queues, log groups, X-Ray writes, and custom CloudWatch metric namespace.
 - GitHub Actions deployment uses AWS OIDC role assumption instead of long-lived AWS access keys.
 
 ## Known Tradeoffs
@@ -23,5 +27,5 @@
 - Replace API key-only access with Cognito authentication and role-aware authorization.
 - Add AWS WAF in front of API Gateway or CloudFront for managed rule protections.
 - Add multi-region checker Lambdas to distinguish local network failures from regional failures.
-- Add DLQ or retry handling for failed alert publication.
+- Add explicit alert publication retry policies or EventBridge routing for multi-subscriber notifications.
 - Store failure drill artifacts in `docs/screenshots/` after each demo.

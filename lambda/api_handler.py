@@ -6,6 +6,9 @@ from json import JSONDecodeError
 from urllib.parse import unquote
 from urllib.parse import urlparse
 
+class InvalidJsonBody(Exception):
+    pass
+
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 CHECKS_TABLE = os.environ.get('CHECKS_TABLE_NAME', 'uptime-checks')
 URLS_TABLE = os.environ.get('URLS_TABLE_NAME', 'monitored-urls')
@@ -63,7 +66,7 @@ def lambda_handler(event, context):
                 'body': json.dumps({'error': 'Route not found'})
             }
     
-    except (JSONDecodeError, ValueError):
+    except InvalidJsonBody:
         return error_response(400, 'Request body must be valid JSON', headers)
 
     except Exception as e:
@@ -92,7 +95,15 @@ def response_headers(event):
 
 def parse_json_body(event):
     body = event.get('body') or '{}'
-    return json.loads(body)
+    try:
+        parsed = json.loads(body)
+    except (JSONDecodeError, ValueError, SystemError) as exc:
+        raise InvalidJsonBody() from exc
+
+    if not isinstance(parsed, dict):
+        raise InvalidJsonBody()
+
+    return parsed
 
 def error_response(status_code, message, headers):
     return {

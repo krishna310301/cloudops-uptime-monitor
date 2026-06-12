@@ -27,8 +27,8 @@ dashboard current rows   = 10 rows per refresh
 - The dashboard reads `latest-url-status`, avoiding reads across retained historical data.
 - Lambda runs on a 5-minute EventBridge schedule and uses 256 MB memory.
 - CloudFront uses `PriceClass_100`.
-- Log retention is set to 14 days.
+- Log retention is set to 365 days to preserve operational evidence and satisfy security scan expectations.
 
 ## Operating Notes
 
-The important cost controls are TTL, on-demand DynamoDB, current-status reads, 14-day log retention, and avoiding always-on compute.
+The important cost controls are TTL, on-demand DynamoDB, current-status reads, scheduled Lambda execution, and avoiding always-on compute. The 365-day log retention setting is intentionally more conservative than a short demo retention period.
