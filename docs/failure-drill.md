@@ -27,7 +27,7 @@ Validate that a failed URL is detected within one 5-minute EventBridge interval 
 
 ## Evidence Table
 
-Fill this table during the demo. Use exact timestamps from CloudWatch Logs, SNS email headers, and the dashboard.
+Fill this table during the drill. Use exact timestamps from CloudWatch Logs, SNS email headers, and the dashboard.
 
 | Event | Timestamp | Evidence |
 |---|---|---|

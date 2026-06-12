@@ -1,5 +1,7 @@
 # CloudOps Uptime Monitor
 
+[![Deploy CloudOps Uptime Monitor](https://github.com/krishna310301/cloudops-uptime-monitor/actions/workflows/deploy.yml/badge.svg)](https://github.com/krishna310301/cloudops-uptime-monitor/actions/workflows/deploy.yml)
+
 CloudOps Uptime Monitor is a serverless website uptime monitoring system built on AWS. It checks website availability every 5 minutes, stores recent status history, maintains an efficient latest-status view, sends alerts on downtime, publishes custom CloudWatch metrics, and displays live status through a React dashboard served by CloudFront.
 
 I built this after working in operations environments where a simple question like "is the service actually reachable?" needed a fast, trustworthy answer. This project keeps that workflow small and practical: scheduled checks, recent history, alerting, and a dashboard that makes the current state easy to scan.
@@ -20,7 +22,7 @@ From the dashboard, I can:
 
 | Improvement | Result |
 | --- | --- |
-| Current-status lookup | Reduced candidate records from 86,400 historical rows to 10 latest-status rows for a 10-URL, 30-day demo workload |
+| Current-status lookup | Reduced candidate records from 86,400 historical rows to 10 latest-status rows for a 10-URL, 30-day reference workload |
 | Custom observability | Added 9 application-level CloudWatch metrics in `CloudOps/UptimeMonitor` |
 | API abuse controls | Added API key enforcement, 10 req/sec throttling, 20-request burst limit, and 10,000 request/day quota |
 | CORS posture | Changed from wildcard browser access to configured allowed origins, defaulting to the CloudFront dashboard |
@@ -89,6 +91,7 @@ Terraform IaC + GitHub Actions CI/CD
 - **Add/remove URLs** — API endpoints to manage monitored websites
 - **CloudWatch visibility** — dashboard tracking Lambda metrics, custom uptime metrics, lookup efficiency, errors, and duration
 - **API hardening** — API key requirement, usage plan throttling, daily quota, and restricted CORS
+- **Operational safeguards** — encrypted logs and data stores, Lambda DLQs, X-Ray tracing, API access logs, and CloudFront security headers
 - **Infrastructure as Code** — stack provisioned with Terraform
 - **CI/CD pipeline** — GitHub Actions runs Lambda tests, frontend tests/build, Terraform validation, security scans, and manual AWS deployment
 
@@ -106,6 +109,17 @@ Terraform IaC + GitHub Actions CI/CD
 | Monitoring     | CloudWatch Logs, Metrics, Alarms, Dashboard |
 | Infrastructure | Terraform                                   |
 | CI/CD          | GitHub Actions                              |
+
+---
+
+## Operational Readiness
+
+- 12 Lambda unit tests cover URL normalization, API behavior, validation failures, metric publishing, TTL writes, and latest-status updates.
+- 4 React dashboard tests cover loading, empty, success, and failure states, including API key headers.
+- Terraform validation checks formatting and provider configuration before deployment.
+- Bandit scans Lambda handlers for Python security issues.
+- Checkov scans Terraform with documented tradeoffs for the low-cost public monitor architecture.
+- Manual AWS deployment uses GitHub Actions OIDC instead of long-lived cloud credentials.
 
 ---
 
@@ -144,7 +158,7 @@ cloudops-uptime-monitor/
 │   ├── failure-drill.md    # downtime drill evidence template
 │   ├── runbook.md          # operational troubleshooting
 │   ├── security.md         # controls and tradeoffs
-│   └── cost.md             # demo workload cost model
+│   └── cost.md             # workload cost model
 └── .github/
     └── workflows/
         └── deploy.yml      # CI/CD pipeline
@@ -216,10 +230,10 @@ Terraform provisions:
 - 1 customer-managed KMS key
 - 1 IAM role with least-privilege policies
 - 1 EventBridge rule + target
-- 1 API Gateway REST API with Lambda proxy integration, API key, usage plan, throttling, quota, and prod stage
+- 1 API Gateway REST API with Lambda proxy integration, API key, usage plan, access logs, throttling, quota, and prod stage
 - 1 SNS topic + email subscription
 - 1 private, encrypted, versioned S3 bucket for frontend assets
-- 1 CloudFront distribution with Origin Access Control
+- 1 CloudFront distribution with Origin Access Control and managed security headers
 - 4 CloudWatch alarms
 - 1 CloudWatch dashboard
 

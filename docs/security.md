@@ -17,7 +17,7 @@
 
 ## Known Tradeoffs
 
-- API Gateway API keys are not user identity. They are used here for throttling, quotas, and basic abuse control because the dashboard is a small portfolio demo.
+- API Gateway API keys are not user identity. They are used here for throttling, quotas, and basic abuse control for a low-cost single-operator deployment.
 - A production multi-user dashboard should use Cognito, IAM authorization, or another identity provider.
 - The dashboard API key is present in the browser build, so it should be treated as a traffic-control key, not a secret.
 - URL checks originate from Lambda public egress. A production monitor may need multiple regions or controlled network vantage points.
@@ -28,4 +28,4 @@
 - Add AWS WAF in front of API Gateway or CloudFront for managed rule protections.
 - Add multi-region checker Lambdas to distinguish local network failures from regional failures.
 - Add explicit alert publication retry policies or EventBridge routing for multi-subscriber notifications.
-- Store failure drill artifacts in `docs/screenshots/` after each demo.
+- Store failure drill artifacts in `docs/screenshots/` after each validation run.

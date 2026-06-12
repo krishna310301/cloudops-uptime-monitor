@@ -1,13 +1,13 @@
 # Cost Model
 
-This project is designed to stay low-cost for a portfolio demo. Actual AWS pricing varies by region and account usage; use this as a workload model rather than a bill guarantee.
+This project is designed to stay low-cost for a small validation workload. Actual AWS pricing varies by region and account usage; use this as a workload model rather than a bill guarantee.
 
-## Demo Assumptions
+## Workload Assumptions
 
 - 10 monitored URLs
 - Checks every 5 minutes
 - 30-day retention
-- Dashboard refresh every 30 seconds during occasional demos
+- Dashboard refresh every 30 seconds during review or validation sessions
 - DynamoDB on-demand billing
 - CloudFront Price Class 100
 
@@ -31,4 +31,4 @@ dashboard current rows   = 10 rows per refresh
 
 ## Operating Notes
 
-The important cost controls are TTL, on-demand DynamoDB, current-status reads, scheduled Lambda execution, and avoiding always-on compute. The 365-day log retention setting is intentionally more conservative than a short demo retention period.
+The important cost controls are TTL, on-demand DynamoDB, current-status reads, scheduled Lambda execution, and avoiding always-on compute. The 365-day log retention setting is intentionally more conservative than a short retention period.
