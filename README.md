@@ -49,8 +49,8 @@ See [docs/metrics.md](docs/metrics.md) for formulas and [docs/failure-drill.md](
 ### Failure Drill
 ![Failure drill dashboard down](docs/screenshots/failure-drill-02-dashboard-down.jpg)
 
-### SNS Alert Evidence
-![SNS email alert evidence](docs/screenshots/failure-drill-04-sns-email-alerts-redacted.jpg)
+### SNS Alert Result
+![SNS email alert result](docs/screenshots/failure-drill-04-sns-email-alerts-redacted.jpg)
 
 ---
 
@@ -155,7 +155,7 @@ cloudops-uptime-monitor/
 ├── tests/                  # Lambda handler unit tests
 ├── docs/
 │   ├── metrics.md          # measured improvements and formulas
-│   ├── failure-drill.md    # downtime drill evidence template
+│   ├── failure-drill.md    # downtime drill results
 │   ├── runbook.md          # operational troubleshooting
 │   ├── security.md         # controls and tradeoffs
 │   ├── design-tradeoffs.md # architecture decisions

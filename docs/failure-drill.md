@@ -43,7 +43,7 @@ https://d3hlcf532b9plq.cloudfront.net/drill/uptime-drill.txt
 
 The drill used the project CloudFront distribution as a controllable public endpoint. The object was uploaded for the healthy state, deleted to force a `404`, then uploaded again to verify recovery.
 
-| Event | Timestamp | Evidence |
+| Event | Timestamp | Captured result |
 |---|---|---|
 | URL added | `2026-06-12T23:46:07Z` | API response and [dashboard UP screenshot](screenshots/failure-drill-01-url-added-up.jpg) |
 | Baseline healthy check stored | `2026-06-12T23:46:08Z` | Lambda response: `status_code=200`, `is_up=true`, `latency_ms=179` |

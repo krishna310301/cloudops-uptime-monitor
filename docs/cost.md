@@ -27,7 +27,7 @@ dashboard current rows   = 10 rows per refresh
 - The dashboard reads `latest-url-status`, avoiding reads across retained historical data.
 - Lambda runs on a 5-minute EventBridge schedule and uses 256 MB memory.
 - CloudFront uses `PriceClass_100`.
-- Log retention is set to 365 days to preserve operational evidence and satisfy security scan expectations.
+- Log retention is set to 365 days to preserve operational history and satisfy security scan expectations.
 
 ## Operating Notes
 
