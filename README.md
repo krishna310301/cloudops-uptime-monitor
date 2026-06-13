@@ -56,6 +56,8 @@ See [docs/metrics.md](docs/metrics.md) for formulas and [docs/failure-drill.md](
 
 ## Architecture
 
+![CloudOps Uptime Monitor architecture](docs/screenshots/architecture.png)
+
 ```mermaid
 flowchart LR
     User["User"] --> CloudFront["CloudFront + private S3 React dashboard"]
