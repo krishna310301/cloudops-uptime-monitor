@@ -49,6 +49,9 @@ See [docs/metrics.md](docs/metrics.md) for formulas and [docs/failure-drill.md](
 ### Failure Drill
 ![Failure drill dashboard down](docs/screenshots/failure-drill-02-dashboard-down.jpg)
 
+### SNS Alert Evidence
+![SNS email alert evidence](docs/screenshots/failure-drill-04-sns-email-alerts-redacted.jpg)
+
 ---
 
 ## Architecture

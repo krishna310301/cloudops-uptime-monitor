@@ -50,10 +50,12 @@ The drill used the project CloudFront distribution as a controllable public endp
 | Failure started | `2026-06-12T23:51:14Z` | CloudFront endpoint returned `404 NoSuchKey` after object deletion and invalidation |
 | Failed check stored | `2026-06-12T23:51:15Z` | Lambda response and DynamoDB `latest-url-status`: `status_code=404`, `is_up=false`, `latency_ms=190` |
 | SNS alert published | `2026-06-12T23:51:15Z` | Lambda log: `DOWN alert sent`; CloudWatch `AlertsSent` metric sum reached `1` |
+| SNS DOWN email received | `2026-06-12T23:51Z` | Gmail receipt from AWS Notifications; [redacted email screenshot](screenshots/failure-drill-04-sns-email-alerts-redacted.jpg) |
 | Repeat DOWN check deduped | `2026-06-12T23:51:55Z` | Lambda response: `status_code=404`, `is_up=false`; no second `DOWN alert sent` log line |
 | Dashboard showed DOWN | `2026-06-12T23:51:41Z` | [dashboard DOWN screenshot](screenshots/failure-drill-02-dashboard-down.jpg) |
 | Recovery confirmed | `2026-06-12T23:52:37Z` | Lambda response and DynamoDB `latest-url-status`: `status_code=200`, `is_up=true`, `latency_ms=179` |
 | Recovery alert published | `2026-06-12T23:52:37Z` | Lambda log: `RECOVERY alert sent`; CloudWatch `AlertsSent` metric sum reached `1` for the recovery minute |
+| SNS RECOVERY email received | `2026-06-12T23:52Z` | Gmail receipt from AWS Notifications; [redacted email screenshot](screenshots/failure-drill-04-sns-email-alerts-redacted.jpg) |
 | Dashboard showed UP after recovery | `2026-06-12T23:53:12Z` | [dashboard recovery screenshot](screenshots/failure-drill-03-dashboard-recovered.jpg) |
 | CloudWatch metric/alarm check | `2026-06-12T23:53:49Z` | `URLsDown` metric reached `1` during outage; `cloudops-urls-down` alarm exists and was `OK` after recovery |
 
@@ -70,12 +72,13 @@ Captured drill metrics:
 |---|---:|
 | Detection latency | `1 second` |
 | SNS publish latency | `0 seconds` from failed check log timestamp |
+| SNS email receipt | Same displayed minute as DOWN and RECOVERY publish events |
 | Dashboard DOWN visibility latency | `26 seconds` |
 | Recovery check latency | `1 second` |
 | Dashboard recovery visibility latency | `36 seconds` |
 | Duplicate DOWN alerts during sustained outage | `0` repeated alerts on the second failed check |
 
-SNS email receipt was not captured in this repository because the subscribed mailbox is outside the repo and local browser session. The Lambda publish log and `AlertsSent` custom metric confirm SNS publication; email delivery should be verified from the subscribed inbox during a human-attended drill.
+The SNS email screenshot is intentionally redacted before committing so the public repository does not expose the unsubscribe URL or email endpoint.
 
 ## Latest Validation Status
 
