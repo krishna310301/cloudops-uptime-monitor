@@ -1,3 +1,8 @@
+/*
+UI refinement pass:
+- Normalized visible labels and status text to sentence case for a production monitoring surface.
+- Kept API calls, polling, validation, and data rendering behavior unchanged.
+*/
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
@@ -252,13 +257,13 @@ function App() {
   }, [status]);
 
   const getStatusLabel = (site) => {
-    if (!site) return "UNKNOWN";
-    if (!site.is_up) return "DOWN";
+    if (!site) return "Unknown";
+    if (!site.is_up) return "Down";
 
     const latency = Number(site.latency_ms);
-    if (Number.isFinite(latency) && latency > 1000) return "SLOW";
+    if (Number.isFinite(latency) && latency > 1000) return "Slow";
 
-    return "UP";
+    return "Up";
   };
 
   const formatTime = (value) => {
@@ -292,7 +297,7 @@ function App() {
     <main className="app-shell">
       <section className="hero">
         <div>
-          <div className="eyebrow">AWS Serverless Monitoring Console</div>
+          <div className="eyebrow">AWS serverless monitoring console</div>
           <h1>CloudOps Uptime Monitor</h1>
           <p>
             Track website availability, latency, and downtime alerts using Lambda,
@@ -301,9 +306,9 @@ function App() {
         </div>
 
         <div className="hero-meta">
-          <span className="pill pill-live">● Live</span>
+          <span className="pill pill-live">Live</span>
           <span className={apiHealthy ? "pill pill-live" : "pill pill-danger"}>
-            API: {apiHealthy ? "Online" : "Offline"}
+            API: {apiHealthy ? "online" : "offline"}
           </span>
           <span className="pill">us-east-1</span>
           <span className="pill">UI refresh: 30s</span>
@@ -327,37 +332,37 @@ function App() {
 
       <section className="metrics-grid">
         <MetricCard
-          label="Overall Health"
+          label="Overall health"
           value={
             metrics.overallHealth === "healthy"
               ? "Healthy"
               : metrics.overallHealth === "degraded"
                 ? "Degraded"
-                : "No Data"
+                : "No data"
           }
           tone={metrics.overallHealth}
           helper="Current monitored fleet state"
         />
         <MetricCard
-          label="Sites Up"
+          label="Sites up"
           value={metrics.upCount}
           tone="healthy"
           helper="Passing latest check"
         />
         <MetricCard
-          label="Sites Down"
+          label="Sites down"
           value={metrics.downCount}
           tone={metrics.downCount > 0 ? "degraded" : "neutral"}
           helper="Failing latest check"
         />
         <MetricCard
-          label="Avg Latency"
+          label="Avg latency"
           value={metrics.totalCount ? `${metrics.avgLatency}ms` : "—"}
           tone={metrics.avgLatency > 1000 ? "warning" : "neutral"}
           helper="Across latest checks"
         />
         <MetricCard
-          label="Last Updated"
+          label="Last updated"
           value={lastUpdated ? formatTime(lastUpdated) : "—"}
           tone="neutral"
           helper="Dashboard refresh time"
@@ -367,7 +372,7 @@ function App() {
       <section className="panel add-panel">
         <div className="panel-header">
           <div>
-            <h2>Add Website</h2>
+            <h2>Add website</h2>
             <p>Add a URL to the monitored list. The next EventBridge cycle will check it.</p>
           </div>
         </div>
@@ -389,7 +394,7 @@ function App() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2>Live Status</h2>
+            <h2>Live status</h2>
             <p>Latest check results stored in DynamoDB and displayed through API Gateway.</p>
           </div>
           <button className="secondary-button" onClick={fetchData}>
@@ -413,7 +418,7 @@ function App() {
                   <th>URL</th>
                   <th>HTTP</th>
                   <th>Latency</th>
-                  <th>Last Checked</th>
+                  <th>Last checked</th>
                 </tr>
               </thead>
               <tbody>
@@ -495,7 +500,7 @@ function MetricCard({ label, value, helper, tone }) {
 }
 
 function StatusBadge({ label }) {
-  return <span className={`status-badge status-${label.toLowerCase()}`}>● {label}</span>;
+  return <span className={`status-badge status-${label.toLowerCase()}`}>{label}</span>;
 }
 
 function EmptyState({ title, message }) {
