@@ -2,7 +2,7 @@
 
 [![Deploy CloudOps Uptime Monitor](https://github.com/krishna310301/cloudops-uptime-monitor/actions/workflows/deploy.yml/badge.svg)](https://github.com/krishna310301/cloudops-uptime-monitor/actions/workflows/deploy.yml)
 
-CloudOps Uptime Monitor is a serverless website uptime monitoring system built on AWS. It checks website availability every 5 minutes, stores recent status history, maintains an efficient latest-status view, sends alerts on downtime, publishes custom CloudWatch metrics, and displays live status through a React dashboard served by CloudFront.
+CloudOps Uptime Monitor is a serverless uptime monitoring platform built on AWS. It checks website availability every 5 minutes, stores recent status history, maintains an efficient latest-status view, sends alerts on downtime, publishes custom CloudWatch metrics, and displays live status through a React dashboard served by CloudFront.
 
 I built this after working in operations environments where a simple question like "is the service actually reachable?" needed a fast, trustworthy answer. This project keeps that workflow small and practical: scheduled checks, recent history, alerting, and a dashboard that makes the current state easy to scan.
 
